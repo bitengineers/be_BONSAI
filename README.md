@@ -1,2 +1,2 @@
-# iot_planter
-IoTプランター(仮)の作成プロジェクト
+# iot_planter_project
+IoTプランター(仮)の作成を管理するプロジェクト
