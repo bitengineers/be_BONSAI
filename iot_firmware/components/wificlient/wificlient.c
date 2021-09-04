@@ -137,7 +137,7 @@ esp_err_t wifi_client_init(wifi_client_config_t *config)
 esp_err_t wifi_client_wait_for_connected(TickType_t xTicksToWait)
 {
   xEventGroupWaitBits(s_wifi_client_event_group, CONNECTED_BIT,
-                      false, true, xTicksToWait);
+                      true, true, xTicksToWait);
   if (xEventGroupGetBits(s_wifi_client_event_group) && CONNECTED_BIT) {
     return ESP_OK;
   }
