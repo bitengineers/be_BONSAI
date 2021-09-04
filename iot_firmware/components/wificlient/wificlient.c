@@ -39,13 +39,14 @@ static uint8_t s_wifi_client_ssid[33] = { 0 };
 static uint8_t *s_wifi_client_password[65] = { 0 };
 static uint8_t *s_wifi_client_bssid[7] = { 0 };
 static uint8_t s_wifi_client_need_sc = 1;
+static wifi_client_config_t *s_wifi_client_config;
 
-
-esp_err_t wifi_client_init(void)
+esp_err_t wifi_client_init(wifi_client_config_t *config)
 {
   esp_err_t err;
   size_t required;
   ESP_LOGI(TAG, "start initializing.");
+  s_wifi_client_config = config;
   err = nvs_flash_init();
   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
     // NVS partition was truncated and needs to be erased
@@ -104,8 +105,11 @@ esp_err_t wifi_client_init(void)
     if (wifi_config.sta.bssid_set == true) {
       memcpy(wifi_config.sta.bssid, s_wifi_client_bssid, sizeof(wifi_config.sta.bssid));
     }
+    if (config->power_save != WIFI_PS_NONE) {
+      esp_wifi_set_ps(config->power_save);
+    }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    esp_wifi_connect();
+    ESP_ERROR_CHECK(esp_wifi_connect());
     s_wifi_client_need_sc = 0;
   } else {
 
@@ -173,12 +177,28 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 {
   if (event_base == WIFI_EVENT) {
     switch(event_id) {
+    case WIFI_EVENT_WIFI_READY:
+      ESP_LOGI(TAG, "WIFI_EVENT: wifi_ready.");
+      break;
+    case WIFI_EVENT_SCAN_DONE:
+      ESP_LOGI(TAG, "WIFI_EVENT: scan done.");
+      break;
     case WIFI_EVENT_STA_START:
       xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 3, NULL);
       break;
+    case WIFI_EVENT_STA_STOP:
+      ESP_LOGI(TAG, "WIFI_EVENT: sta stoppped.");
+      break;
+    case WIFI_EVENT_STA_CONNECTED:
+      ESP_LOGI(TAG, "WIFI_EVENT: sta connected.");
+      break;
     case WIFI_EVENT_STA_DISCONNECTED:
+      ESP_LOGI(TAG, "WIFI_EVENT: sta disconnected.");
       esp_wifi_connect();
       xEventGroupClearBits(s_wifi_client_event_group, CONNECTED_BIT);
+      break;
+    case WIFI_EVENT_STA_BEACON_TIMEOUT:
+      ESP_LOGI(TAG, "Station received beacon timeout event.");
       break;
     default:
       ESP_LOGI(TAG, "WIFI_EVENT: event_id = %d\n", event_id);
@@ -224,6 +244,9 @@ static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
       wifi_config.sta.bssid_set = evt->bssid_set;
       if (wifi_config.sta.bssid_set == true) {
         memcpy(wifi_config.sta.bssid, evt->bssid, sizeof(wifi_config.sta.bssid));
+      }
+      if (s_wifi_client_config->power_save != WIFI_PS_NONE) {
+        ESP_ERROR_CHECK(esp_wifi_set_ps(s_wifi_client_config->power_save));
       }
 
       ESP_LOGI(TAG, "SSID:%s", evt->ssid);
