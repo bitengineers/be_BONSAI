@@ -1,3 +1,6 @@
 [submodule "iot_firmware/components/esp32_axp192"]
 	path = iot_firmware/components/esp32_axp192
 	url = git@github.com:bitengineers/esp32_axp192.git
+[submodule "iot_firmware/components/esp-aws-iot"]
+	path = iot_firmware/components/esp-aws-iot
+	url = git@github.com:espressif/esp-aws-iot.git
