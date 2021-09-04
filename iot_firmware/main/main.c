@@ -18,7 +18,8 @@ void app_main(void)
   ESP_LOGI(TAG, "app_main: started.");
   memset(&wc_config, 0, sizeof(wifi_client_config_t));
   wifi_client_init(&wc_config);
-  wifi_client_wait_for_connected(pdMS_TO_TICKS(1000 * 60 * 60 * 1));
+  wifi_client_wait_for_connected(pdMS_TO_TICKS(1000 * 10));
+
   soilsensor_init();
   vTaskDelay(pdMS_TO_TICKS(1000));
   while (1) {
