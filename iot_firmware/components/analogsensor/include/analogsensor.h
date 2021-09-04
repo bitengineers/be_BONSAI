@@ -1,5 +1,4 @@
-#ifndef __ANALOGSENSOR_H__
-#define __ANALOGSENSOR_H__
+#pragma once
 
 #include <stdbool.h>
 
@@ -24,5 +23,3 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif // __cplusplus
-
-#endif // __ANALOGSENSOR_H__

@@ -1,5 +1,4 @@
-#ifndef __WIFICLIENT_H__
-#define __WIFICLIENT_H__
+#pragma once
 
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
@@ -21,5 +20,3 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif // __cplusplus
-
-#endif // __WIFICLIENT_H__
