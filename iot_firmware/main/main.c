@@ -4,6 +4,7 @@
 #include "esp_log.h"
 
 #include "wificlient.h"
+#include "soilsensor.h"
 
 static const char *TAG = "IoT_Plant";
 
@@ -18,7 +19,11 @@ void app_main(void)
   memset(&wc_config, 0, sizeof(wifi_client_config_t));
   wifi_client_init(&wc_config);
   wifi_client_wait_for_connected(pdMS_TO_TICKS(1000 * 60 * 60 * 1));
+  soilsensor_init();
+  vTaskDelay(pdMS_TO_TICKS(1000));
   while (1) {
+    int value = soilsensor_get_value();
+    ESP_LOGI(TAG, "adc output = %d\n", value);
     vTaskDelay(pdMS_TO_TICKS(10 * 1000));
   }
 }
