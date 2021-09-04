@@ -3,6 +3,7 @@
 
 #include "esp_log.h"
 
+#include "axp192.h"
 #include "wificlient.h"
 #include "soilsensor.h"
 
@@ -16,6 +17,9 @@ wifi_client_config_t wc_config = {
 void app_main(void)
 {
   ESP_LOGI(TAG, "app_main: started.");
+  axp192_init();
+  axp192_exten(true);
+
   memset(&wc_config, 0, sizeof(wifi_client_config_t));
   wifi_client_init(&wc_config);
   wifi_client_wait_for_connected(pdMS_TO_TICKS(1000 * 10));
