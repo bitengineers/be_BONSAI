@@ -40,6 +40,7 @@ static uint8_t *s_wifi_client_password[65] = { 0 };
 static uint8_t *s_wifi_client_bssid[7] = { 0 };
 static uint8_t s_wifi_client_need_sc = 1;
 static wifi_client_config_t *s_wifi_client_config;
+static esp_netif_t *sta_netif = NULL;
 
 esp_err_t wifi_client_init(wifi_client_config_t *config)
 {
@@ -61,8 +62,20 @@ esp_err_t wifi_client_init(wifi_client_config_t *config)
 
   ESP_ERROR_CHECK(esp_netif_init());
   s_wifi_client_event_group = xEventGroupCreate();
-  ESP_ERROR_CHECK(esp_event_loop_create_default());
-  esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
+  err = esp_event_loop_create_default();
+  switch(err) {
+  case ESP_OK:
+    // success
+  case ESP_ERR_INVALID_STATE:
+    // already created
+    break;
+
+  default:
+    abort();
+  }
+  if (sta_netif == NULL) {
+    sta_netif = esp_netif_create_default_wifi_sta();
+  }
   assert(sta_netif);
 
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -133,6 +146,15 @@ esp_err_t wifi_client_init(wifi_client_config_t *config)
   ESP_LOGI(TAG, "initialized.");
   return ESP_OK;
 }
+
+esp_err_t wifi_client_deinit(void)
+{
+  ESP_ERROR_CHECK(esp_wifi_disconnect());
+  ESP_ERROR_CHECK(esp_wifi_stop());
+  ESP_ERROR_CHECK(esp_wifi_restore());
+  return ESP_OK;
+}
+
 
 esp_err_t wifi_client_wait_for_connected(TickType_t xTicksToWait)
 {
