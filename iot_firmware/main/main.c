@@ -73,7 +73,6 @@ void app_main(void)
 
   // PMU
   axp192_init();
-  axp192_exten(true);
 
   while (1) {
     // AWS
@@ -81,13 +80,15 @@ void app_main(void)
 
     // Update sensor values...
     // 1. Soil sensor
+
+    //    Enable 5V output
+    axp192_exten(true);
     soilsensor_init();
-    vTaskDelay(pdMS_TO_TICKS(500));
+    //    Wait a second, to acquire precise value
+    vTaskDelay(pdMS_TO_TICKS(1000));
     int soil_value = soilsensor_get_value();
     axp192_exten(false);
     ESP_LOGI(TAG, "adc output = %d\n", soil_value);
-
-    // 2. etc...
 
     // create json objects
     size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
