@@ -1,7 +1,7 @@
 idf_component_register(
   SRCS "main.c"
   INCLUDE_DIRS "."
-  REQUIRES wificlient analogsensor soilsensor esp32_axp192 awsclient)
+  REQUIRES nvs_flash wificlient analogsensor soilsensor esp32_axp192 awsclient esp-aws-iot)
 
 target_add_binary_data(${COMPONENT_TARGET} "certs/aws-root-ca.pem" TEXT)
 target_add_binary_data(${COMPONENT_TARGET} "certs/certificate.pem.crt" TEXT)
