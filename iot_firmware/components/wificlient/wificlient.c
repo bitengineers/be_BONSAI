@@ -13,6 +13,10 @@
 #include "esp_smartconfig.h"
 #include "esp_log.h"
 
+#include "lwip/netif.h"
+#include "lwip/dhcp.h"
+#include "lwip/prot/dhcp.h"
+
 #include "wificlient.h"
 
 
@@ -35,17 +39,23 @@ static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
 /* EventGroup and bits */
 static EventGroupHandle_t s_wifi_client_event_group;
 static const int CONNECTED_BIT = BIT0;
-static const int ESPTOUCH_DONE_BIT = BIT1;
+static const int DONE_BIT = BIT1;
 
 /* NVS handle for wifi client */
 static nvs_handle_t s_wifi_client_handle;
 
+/* Static variables for credentials */
+static uint8_t s_wifi_client_has_credentials = 0;
 static uint8_t s_wifi_client_ssid[33] = { 0 };
 static uint8_t *s_wifi_client_password[65] = { 0 };
 static uint8_t bssid_set = 0;
 static uint8_t *s_wifi_client_bssid[7] = { 0 };
-static wifi_client_config_t *s_wifi_client_config;
+
+/* WIFI interface */
 static esp_netif_t *sta_netif = NULL;
+
+/* wifi_client configuration */
+static wifi_client_config_t *s_wifi_client_config;
 
 
 static uint8_t _wifi_client_load_credentials()
@@ -79,9 +89,9 @@ static uint8_t _wifi_client_load_credentials()
 
 static void wifi_client_connect_task(void* param)
 {
-  EventBits_t uxBits;
+  //EventBits_t uxBits;
   // Connect WIFI with saved credentials
-  if (strlen((const char*)s_wifi_client_ssid) > 0 && strlen((const char*)s_wifi_client_password) > 0) {
+  if (s_wifi_client_has_credentials) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
@@ -100,20 +110,6 @@ static void wifi_client_connect_task(void* param)
     ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_connect());
-    // xEventGroupSetBits(s_wifi_client_event_group, CONNECTED_BIT|ESPTOUCH_DONE_BIT);
-
-    while (1) {
-      uxBits = xEventGroupWaitBits(
-      s_wifi_client_event_group,
-      CONNECTED_BIT, false, true, portMAX_DELAY);
-      if(uxBits & CONNECTED_BIT) {
-        // ESP_LOGD(TAG, "WiFi Connected to ap");
-      }
-      if(uxBits & ESPTOUCH_DONE_BIT) {
-        // ESP_LOGD(TAG, "smartconfig over");
-        vTaskDelete(NULL);
-      }
-    }
   }
 }
 
@@ -158,6 +154,7 @@ esp_err_t wifi_client_init(wifi_client_config_t *config)
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &ip_event_handler, NULL));
     // Smart Config EVENT
   ESP_ERROR_CHECK(esp_event_handler_register(SC_EVENT, ESP_EVENT_ANY_ID, &smart_config_event_handler, NULL));
+  s_wifi_client_has_credentials = _wifi_client_load_credentials();
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_start());
   ESP_LOGI(TAG, "initialized.");
@@ -175,10 +172,16 @@ esp_err_t wifi_client_deinit(void)
 
 esp_err_t wifi_client_wait_for_connected(TickType_t xTicksToWait)
 {
-  xEventGroupWaitBits(s_wifi_client_event_group, CONNECTED_BIT|ESPTOUCH_DONE_BIT,
+  xEventGroupWaitBits(s_wifi_client_event_group, CONNECTED_BIT|DONE_BIT,
                       false, true, xTicksToWait);
-  if (xEventGroupGetBits(s_wifi_client_event_group) && CONNECTED_BIT) {
-    return ESP_OK;
+  if (s_wifi_client_has_credentials) {
+    if (xEventGroupGetBits(s_wifi_client_event_group) && CONNECTED_BIT) {
+      return ESP_OK;
+    }
+  } else {
+    if (xEventGroupGetBits(s_wifi_client_event_group) && CONNECTED_BIT|DONE_BIT) {
+      return ESP_OK;
+    }
   }
   return ESP_FAIL;
 }
@@ -190,18 +193,37 @@ static void smartconfig_task(void *parm)
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_V2)); */
-  smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
-  ESP_ERROR_CHECK(esp_smartconfig_start(&cfg));
-  while (1) {
-    uxBits = xEventGroupWaitBits(s_wifi_client_event_group,
-                                 CONNECTED_BIT | ESPTOUCH_DONE_BIT, false, false, portMAX_DELAY);
-    if(uxBits & CONNECTED_BIT) {
-      ESP_LOGI(TAG, "WiFi Connected to ap");
+  if (!s_wifi_client_has_credentials) {
+    smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_smartconfig_start(&cfg));
+
+    while (1) {
+      uxBits = xEventGroupWaitBits(s_wifi_client_event_group,
+                                   CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
+      if(uxBits & CONNECTED_BIT) {
+        // ESP_LOGI(TAG, "WiFi Connected to ap");
+      }
+      if(uxBits & DONE_BIT) {
+        // ESP_LOGI(TAG, "smartconfig over");
+        esp_smartconfig_stop();
+        vTaskDelete(NULL);
+      }
+      vTaskDelay(pdMS_TO_TICKS(3000));
     }
-    if(uxBits & ESPTOUCH_DONE_BIT) {
-      ESP_LOGI(TAG, "smartconfig over");
-      esp_smartconfig_stop();
-      vTaskDelete(NULL);
+  } else {
+    wifi_client_connect_task(NULL);
+    while (1) {
+      uxBits = xEventGroupWaitBits(s_wifi_client_event_group,
+                                   CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
+      if(uxBits & CONNECTED_BIT) {
+        esp_netif_dhcp_status_t dhcp_status;
+        ESP_ERROR_CHECK(esp_netif_dhcpc_get_status(sta_netif, &dhcp_status));
+        if (dhcp_status == ESP_NETIF_DHCP_STARTED) {
+          xEventGroupSetBits(s_wifi_client_event_group, DONE_BIT);
+          vTaskDelete(NULL);        
+        }
+      }
+      vTaskDelay(pdMS_TO_TICKS(3000));
     }
   }
 }
@@ -253,6 +275,10 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
   case IP_EVENT_STA_GOT_IP:
     ESP_LOGI(TAG, "IP_EVENT: Got IP");
     xEventGroupSetBits(s_wifi_client_event_group, CONNECTED_BIT);
+    if (s_wifi_client_has_credentials) {
+      ESP_LOGI(TAG, "\tdhcpc starts");
+      esp_netif_dhcpc_start(sta_netif);
+    }
     break;
   default:
     ESP_LOGI(TAG, "IP_EVENT: event_id = %d\n", event_id);
@@ -313,7 +339,7 @@ static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
     break;
   case SC_EVENT_SEND_ACK_DONE:
     ESP_LOGI(TAG, "SC_EVENT: SEND_ACK_DONE");
-    xEventGroupSetBits(s_wifi_client_event_group, ESPTOUCH_DONE_BIT);
+    xEventGroupSetBits(s_wifi_client_event_group, DONE_BIT);
     break;
   default:
     ESP_LOGI(TAG, "SC_EVENT: event_id = %d\n", event_id);
