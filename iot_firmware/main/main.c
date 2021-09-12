@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "sdkconfig.h"
 
 #include "esp_system.h"
 #include "nvs_flash.h"
@@ -11,17 +14,44 @@
 #include "axp192.h"
 #include "wificlient.h"
 #include "soilsensor.h"
+#include "awsclient.h"
+
+#include "main.h"
+
 
 #define WAKE_UP_PIN ((gpio_num_t) 37)
+#define JSON_BUFFER_MAX_LENGTH 255
 
 static const char *TAG = "IoT_Plant";
-static const uint64_t wakeup_time_sec_us = 10 * 1000 * 1000;
+static const uint64_t wakeup_time_sec_us = 3 * 60 * 1000 * 1000;
 
 wifi_client_config_t wc_config = {
   // .power_save = WIFI_PS_NONE,
   .power_save = WIFI_PS_MIN_MODEM,
   // .power_save = WIFI_PS_MAX_MODEM
 };
+
+awsclient_config_t awsconfig = {
+  .shadow_params = {
+    .pHost = CONFIG_AWS_IOT_MQTT_HOST,
+    .port  = CONFIG_AWS_IOT_MQTT_PORT,
+    .pClientCRT = (const char *)certificate_pem_crt_start,
+    .pClientKey = (const char *)private_pem_key_start,
+    .pRootCA    = (const char *)aws_root_ca_pem_start,
+    .enableAutoReconnect = true,
+    .disconnectHandler = NULL
+  },
+  .shadow_connect_params = {
+    .pMyThingName = CONFIG_AWS_IOT_THING_NAME,
+    .pMqttClientId = CONFIG_AWS_IOT_CLIENT_ID,
+    .mqttClientIdLen = (uint16_t) strlen(CONFIG_AWS_IOT_CLIENT_ID),
+    .deleteActionHandler = NULL,
+  },
+  .timeout_sec = 10,
+};
+
+char jsonDocumentBuffer[JSON_BUFFER_MAX_LENGTH];
+
 
 void app_main(void)
 {
@@ -45,17 +75,39 @@ void app_main(void)
   axp192_init();
   axp192_exten(true);
 
+  while (1) {
+    // AWS
+    awsclient_shadow_init(&awsconfig);
 
-    // Soil sensor
+    // Update sensor values...
+    // 1. Soil sensor
     soilsensor_init();
     vTaskDelay(pdMS_TO_TICKS(500));
-    int value = soilsensor_get_value();
+    int soil_value = soilsensor_get_value();
     axp192_exten(false);
-    ESP_LOGI(TAG, "adc output = %d\n", value);
+    ESP_LOGI(TAG, "adc output = %d\n", soil_value);
 
-    soilsensor_deinit();
-    wifi_client_deinit();
-    axp192_deinit();
+    // 2. etc...
+
+    // create json objects
+    size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
+    struct jsonStruct soil;
+    soil.cb = NULL;
+    soil.pData = &soil_value;
+    soil.dataLength = sizeof(uint16_t);
+    soil.pKey = "soil value";
+    soil.type = SHADOW_JSON_UINT16;
+
+    aws_iot_shadow_init_json_document(jsonDocumentBuffer,
+                                      jsonDocumentBufferSize);
+    aws_iot_shadow_add_reported(jsonDocumentBuffer,
+                                jsonDocumentBufferSize,
+                                1, &soil);
+    aws_iot_finalize_json_document(jsonDocumentBuffer,
+                                   jsonDocumentBufferSize);
+
+    // AWS update shadow
+    awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
 
     // sleep
     ESP_LOGI(TAG, "preparing sleep");
