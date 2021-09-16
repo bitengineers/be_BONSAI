@@ -79,4 +79,9 @@ static void shadow_update_status_cb(const char *pThingName, ShadowActions_t acti
     } else if(SHADOW_ACK_ACCEPTED == status) {
         ESP_LOGI(TAG, "Update accepted");
     }
+
+IoT_Error_t awsclient_err(void) {
+  return res;
+}
+
   }
