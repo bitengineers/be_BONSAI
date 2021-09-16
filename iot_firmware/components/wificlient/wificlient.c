@@ -42,7 +42,7 @@ static const int CONNECTED_BIT = BIT0;
 static const int DONE_BIT = BIT1;
 
 /* NVS handle for wifi client */
-static nvs_handle_t s_wifi_client_handle;
+static nvs_handle_t s_wifi_client_handle = 0;
 
 /* Static variables for credentials */
 static uint8_t s_wifi_client_has_credentials = 0;
@@ -107,7 +107,7 @@ static void wifi_client_connect_task(void* param)
     if (s_wifi_client_config->power_save != WIFI_PS_NONE) {
       esp_wifi_set_ps(s_wifi_client_config->power_save);
     }
-    ESP_ERROR_CHECK(esp_wifi_disconnect());
+    // ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_connect());
   }
@@ -119,9 +119,11 @@ esp_err_t wifi_client_init(wifi_client_config_t *config)
   ESP_LOGI(TAG, "start initializing.");
   s_wifi_client_config = config;
 
-  err = nvs_open("wifi_client", NVS_READWRITE, &s_wifi_client_handle);
-  if (err != ESP_OK) {
-    s_wifi_client_handle = 0;
+  if (s_wifi_client_handle == 0) {
+    err = nvs_open("wifi_client", NVS_READWRITE, &s_wifi_client_handle);
+    if (err != ESP_OK) {
+      s_wifi_client_handle = 0;
+    }
   }
 
   ESP_ERROR_CHECK(esp_netif_init());
@@ -166,6 +168,7 @@ esp_err_t wifi_client_deinit(void)
   ESP_ERROR_CHECK(esp_wifi_disconnect());
   ESP_ERROR_CHECK(esp_wifi_stop());
   ESP_ERROR_CHECK(esp_wifi_restore());
+  xEventGroupClearBits(s_wifi_client_event_group, CONNECTED_BIT|DONE_BIT);
   return ESP_OK;
 }
 
@@ -253,7 +256,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     break;
   case WIFI_EVENT_STA_DISCONNECTED:
     ESP_LOGI(TAG, "WIFI_EVENT: sta disconnected.");
-    esp_wifi_connect();
     xEventGroupClearBits(s_wifi_client_event_group, CONNECTED_BIT);
     break;
   case WIFI_EVENT_STA_BEACON_TIMEOUT:

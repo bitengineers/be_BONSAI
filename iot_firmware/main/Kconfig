@@ -3,11 +3,11 @@ menu "Iot Planter Configuration"
         string "AWS IoT Client ID"
         default "testThing"
         help
-            AWS IoT Client ID for the example. Should be unique for every device.
+            AWS IoT Client ID. Should be unique for every device.
 
     config AWS_IOT_THING_NAME
         string "AWS IoT Thing Name"
         default "testThing"
         help
-            AWS IoT Thing Name for the example. Should be unique for every device.
+            AWS IoT Thing Name. Should be unique for every device.
 endmenu
