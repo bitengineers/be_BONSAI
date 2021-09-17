@@ -20,10 +20,10 @@
 #include "wificlient.h"
 
 
-#define WIFI_CLIENT_KEY_SSID      (char *)"SSID"
-#define WIFI_CLIENT_KEY_PASSWORD  (char *)"PASSWORD"
-#define WIFI_CLIENT_KEY_BSSID_SET (char *)"BSSID_SET"
-#define WIFI_CLIENT_KEY_BSSID     (char *)"BSSID"
+#define WIFICLIENT_KEY_SSID      (char *)"SSID"
+#define WIFICLIENT_KEY_PASSWORD  (char *)"PASSWORD"
+#define WIFICLIENT_KEY_BSSID_SET (char *)"BSSID_SET"
+#define WIFICLIENT_KEY_BSSID     (char *)"BSSID"
 
 
 static const char *TAG = "wificlient";
@@ -37,75 +37,75 @@ static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data);
 
 /* EventGroup and bits */
-static EventGroupHandle_t s_wifi_client_event_group;
+static EventGroupHandle_t s_wificlient_event_group;
 static const int CONNECTED_BIT = BIT0;
 static const int DONE_BIT = BIT1;
 
 /* NVS handle for wifi client */
-static nvs_handle_t s_wifi_client_handle = 0;
+static nvs_handle_t s_wificlient_handle = 0;
 
 /* Static variables for credentials */
-static uint8_t s_wifi_client_has_credentials = 0;
-static uint8_t s_wifi_client_ssid[33] = { 0 };
-static uint8_t *s_wifi_client_password[65] = { 0 };
+static uint8_t s_wificlient_has_credentials = 0;
+static uint8_t s_wificlient_ssid[33] = { 0 };
+static uint8_t *s_wificlient_password[65] = { 0 };
 static uint8_t bssid_set = 0;
-static uint8_t *s_wifi_client_bssid[7] = { 0 };
+static uint8_t *s_wificlient_bssid[7] = { 0 };
 
 /* WIFI interface */
 static esp_netif_t *sta_netif = NULL;
 
-/* wifi_client configuration */
-static wifi_client_config_t *s_wifi_client_config;
+/* wificlient configuration */
+static wificlient_config_t *s_wificlient_config;
 
 
-static uint8_t _wifi_client_load_credentials()
+static uint8_t _wificlient_load_credentials()
 {
   size_t required;
   // Check saved credentials
   // SSID
-  nvs_get_str(s_wifi_client_handle, WIFI_CLIENT_KEY_SSID, (char *)s_wifi_client_ssid, &required);
-  if (required != sizeof(s_wifi_client_ssid)) {
+  nvs_get_str(s_wificlient_handle, WIFICLIENT_KEY_SSID, (char *)s_wificlient_ssid, &required);
+  if (required != sizeof(s_wificlient_ssid)) {
     // error log
   }
   // PASSWORD
-  nvs_get_str(s_wifi_client_handle, WIFI_CLIENT_KEY_PASSWORD, (char *)s_wifi_client_password, &required);
-  if (required != sizeof(s_wifi_client_password)) {
+  nvs_get_str(s_wificlient_handle, WIFICLIENT_KEY_PASSWORD, (char *)s_wificlient_password, &required);
+  if (required != sizeof(s_wificlient_password)) {
     // error log
   }
   // BSSID
-  nvs_get_u8(s_wifi_client_handle, WIFI_CLIENT_KEY_BSSID_SET, &bssid_set);
+  nvs_get_u8(s_wificlient_handle, WIFICLIENT_KEY_BSSID_SET, &bssid_set);
   if (bssid_set) {
-    nvs_get_str(s_wifi_client_handle, WIFI_CLIENT_KEY_BSSID, (char *)s_wifi_client_bssid, &required);
-    if (required != sizeof(s_wifi_client_password)) {
+    nvs_get_str(s_wificlient_handle, WIFICLIENT_KEY_BSSID, (char *)s_wificlient_bssid, &required);
+    if (required != sizeof(s_wificlient_password)) {
       // error log
     }
   }
-  if (strlen((const char*)s_wifi_client_ssid) > 0 && strlen((const char*)s_wifi_client_password) > 0) {
+  if (strlen((const char*)s_wificlient_ssid) > 0 && strlen((const char*)s_wificlient_password) > 0) {
     return 1;
   }
 
   return 0;
 }
 
-static void wifi_client_connect_task(void* param)
+static void wificlient_connect_task(void* param)
 {
   //EventBits_t uxBits;
   // Connect WIFI with saved credentials
-  if (s_wifi_client_has_credentials) {
+  if (s_wificlient_has_credentials) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     wifi_config_t wifi_config;
     memset(&wifi_config, 0, sizeof(wifi_config_t));
-    memcpy(wifi_config.sta.ssid, s_wifi_client_ssid, sizeof(wifi_config.sta.ssid));
-    memcpy(wifi_config.sta.password, s_wifi_client_password, sizeof(wifi_config.sta.password));
+    memcpy(wifi_config.sta.ssid, s_wificlient_ssid, sizeof(wifi_config.sta.ssid));
+    memcpy(wifi_config.sta.password, s_wificlient_password, sizeof(wifi_config.sta.password));
     wifi_config.sta.bssid_set = bssid_set;
     if (wifi_config.sta.bssid_set == true) {
-      memcpy(wifi_config.sta.bssid, s_wifi_client_bssid, sizeof(wifi_config.sta.bssid));
+      memcpy(wifi_config.sta.bssid, s_wificlient_bssid, sizeof(wifi_config.sta.bssid));
     }
 
-    if (s_wifi_client_config->power_save != WIFI_PS_NONE) {
-      esp_wifi_set_ps(s_wifi_client_config->power_save);
+    if (s_wificlient_config->power_save != WIFI_PS_NONE) {
+      esp_wifi_set_ps(s_wificlient_config->power_save);
     }
     // ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -113,21 +113,21 @@ static void wifi_client_connect_task(void* param)
   }
 }
 
-esp_err_t wifi_client_init(wifi_client_config_t *config)
+esp_err_t wificlient_init(wificlient_config_t *config)
 {
   esp_err_t err;
   ESP_LOGI(TAG, "start initializing.");
-  s_wifi_client_config = config;
+  s_wificlient_config = config;
 
-  if (s_wifi_client_handle == 0) {
-    err = nvs_open("wifi_client", NVS_READWRITE, &s_wifi_client_handle);
+  if (s_wificlient_handle == 0) {
+    err = nvs_open("wificlient", NVS_READWRITE, &s_wificlient_handle);
     if (err != ESP_OK) {
-      s_wifi_client_handle = 0;
+      s_wificlient_handle = 0;
     }
   }
 
   ESP_ERROR_CHECK(esp_netif_init());
-  s_wifi_client_event_group = xEventGroupCreate();
+  s_wificlient_event_group = xEventGroupCreate();
   err = esp_event_loop_create_default();
   switch(err) {
   case ESP_OK:
@@ -145,10 +145,10 @@ esp_err_t wifi_client_init(wifi_client_config_t *config)
 
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-  // ESP_ERROR_CHECK(esp_wifi_set_ps(s_wifi_client_config->power_save));
-  memset(s_wifi_client_ssid, 0, sizeof(s_wifi_client_ssid));
-  memset(s_wifi_client_password, 0, sizeof(s_wifi_client_password));
-  memset(s_wifi_client_bssid, 0, sizeof(s_wifi_client_bssid));
+  // ESP_ERROR_CHECK(esp_wifi_set_ps(s_wificlient_config->power_save));
+  memset(s_wificlient_ssid, 0, sizeof(s_wificlient_ssid));
+  memset(s_wificlient_password, 0, sizeof(s_wificlient_password));
+  memset(s_wificlient_bssid, 0, sizeof(s_wificlient_bssid));
 
   // WIFI EVENT
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
@@ -156,33 +156,33 @@ esp_err_t wifi_client_init(wifi_client_config_t *config)
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &ip_event_handler, NULL));
     // Smart Config EVENT
   ESP_ERROR_CHECK(esp_event_handler_register(SC_EVENT, ESP_EVENT_ANY_ID, &smart_config_event_handler, NULL));
-  s_wifi_client_has_credentials = _wifi_client_load_credentials();
+  s_wificlient_has_credentials = _wificlient_load_credentials();
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_start());
   ESP_LOGI(TAG, "initialized.");
   return ESP_OK;
 }
 
-esp_err_t wifi_client_deinit(void)
+esp_err_t wificlient_deinit(void)
 {
   ESP_ERROR_CHECK(esp_wifi_disconnect());
   ESP_ERROR_CHECK(esp_wifi_stop());
   ESP_ERROR_CHECK(esp_wifi_restore());
-  xEventGroupClearBits(s_wifi_client_event_group, CONNECTED_BIT|DONE_BIT);
+  xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
   return ESP_OK;
 }
 
 
-esp_err_t wifi_client_wait_for_connected(TickType_t xTicksToWait)
+esp_err_t wificlient_wait_for_connected(TickType_t xTicksToWait)
 {
-  xEventGroupWaitBits(s_wifi_client_event_group, CONNECTED_BIT|DONE_BIT,
+  xEventGroupWaitBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT,
                       false, true, xTicksToWait);
-  if (s_wifi_client_has_credentials) {
-    if (xEventGroupGetBits(s_wifi_client_event_group) && CONNECTED_BIT) {
+  if (s_wificlient_has_credentials) {
+    if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT) {
       return ESP_OK;
     }
   } else {
-    if (xEventGroupGetBits(s_wifi_client_event_group) && CONNECTED_BIT|DONE_BIT) {
+    if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT|DONE_BIT) {
       return ESP_OK;
     }
   }
@@ -196,12 +196,12 @@ static void smartconfig_task(void *parm)
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_V2)); */
-  if (!s_wifi_client_has_credentials) {
+  if (!s_wificlient_has_credentials) {
     smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_smartconfig_start(&cfg));
 
     while (1) {
-      uxBits = xEventGroupWaitBits(s_wifi_client_event_group,
+      uxBits = xEventGroupWaitBits(s_wificlient_event_group,
                                    CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
       if(uxBits & CONNECTED_BIT) {
         // ESP_LOGI(TAG, "WiFi Connected to ap");
@@ -214,15 +214,15 @@ static void smartconfig_task(void *parm)
       vTaskDelay(pdMS_TO_TICKS(3000));
     }
   } else {
-    wifi_client_connect_task(NULL);
+    wificlient_connect_task(NULL);
     while (1) {
-      uxBits = xEventGroupWaitBits(s_wifi_client_event_group,
+      uxBits = xEventGroupWaitBits(s_wificlient_event_group,
                                    CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
       if(uxBits & CONNECTED_BIT) {
         esp_netif_dhcp_status_t dhcp_status;
         ESP_ERROR_CHECK(esp_netif_dhcpc_get_status(sta_netif, &dhcp_status));
         if (dhcp_status == ESP_NETIF_DHCP_STARTED) {
-          xEventGroupSetBits(s_wifi_client_event_group, DONE_BIT);
+          xEventGroupSetBits(s_wificlient_event_group, DONE_BIT);
           vTaskDelete(NULL);        
         }
       }
@@ -256,7 +256,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     break;
   case WIFI_EVENT_STA_DISCONNECTED:
     ESP_LOGI(TAG, "WIFI_EVENT: sta disconnected.");
-    xEventGroupClearBits(s_wifi_client_event_group, CONNECTED_BIT);
+    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT);
     break;
   case WIFI_EVENT_STA_BEACON_TIMEOUT:
     ESP_LOGI(TAG, "Station received beacon timeout event.");
@@ -276,8 +276,8 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
   switch(event_id) {
   case IP_EVENT_STA_GOT_IP:
     ESP_LOGI(TAG, "IP_EVENT: Got IP");
-    xEventGroupSetBits(s_wifi_client_event_group, CONNECTED_BIT);
-    if (s_wifi_client_has_credentials) {
+    xEventGroupSetBits(s_wificlient_event_group, CONNECTED_BIT);
+    if (s_wificlient_has_credentials) {
       ESP_LOGI(TAG, "\tdhcpc starts");
       esp_netif_dhcpc_start(sta_netif);
     }
@@ -317,31 +317,31 @@ static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
     ESP_LOGI(TAG, "SSID:%s", evt->ssid);
     ESP_LOGI(TAG, "PASSWORD:%s", evt->password);
     ESP_ERROR_CHECK(esp_wifi_disconnect());
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM)); // s_wifi_client_config->power_save));
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM)); // s_wificlient_config->power_save));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     esp_wifi_connect();
 
     // store credentials
-    err = nvs_set_str(s_wifi_client_handle, WIFI_CLIENT_KEY_SSID, (const char*)evt->ssid);
+    err = nvs_set_str(s_wificlient_handle, WIFICLIENT_KEY_SSID, (const char*)evt->ssid);
     if (err != ESP_OK) {
       ESP_LOGI(TAG, "Failed nvs_set ssid");
     }
-    err = nvs_set_str(s_wifi_client_handle, WIFI_CLIENT_KEY_PASSWORD, (const char*)evt->password);
+    err = nvs_set_str(s_wificlient_handle, WIFICLIENT_KEY_PASSWORD, (const char*)evt->password);
     if (err != ESP_OK) {
       ESP_LOGI(TAG, "Failed nvs_set password");
     }
-    err = nvs_set_u8(s_wifi_client_handle, WIFI_CLIENT_KEY_BSSID_SET, evt->bssid_set);
+    err = nvs_set_u8(s_wificlient_handle, WIFICLIENT_KEY_BSSID_SET, evt->bssid_set);
     if (err != ESP_OK) {
       ESP_LOGI(TAG, "Failed nvs_set bssid_set");
     }
-    err = nvs_set_str(s_wifi_client_handle, WIFI_CLIENT_KEY_BSSID, (const char*)evt->bssid);
+    err = nvs_set_str(s_wificlient_handle, WIFICLIENT_KEY_BSSID, (const char*)evt->bssid);
     if (err != ESP_OK) {
       ESP_LOGI(TAG, "Failed nvs_set bssid");
     }
     break;
   case SC_EVENT_SEND_ACK_DONE:
     ESP_LOGI(TAG, "SC_EVENT: SEND_ACK_DONE");
-    xEventGroupSetBits(s_wifi_client_event_group, DONE_BIT);
+    xEventGroupSetBits(s_wificlient_event_group, DONE_BIT);
     break;
   default:
     ESP_LOGI(TAG, "SC_EVENT: event_id = %d\n", event_id);

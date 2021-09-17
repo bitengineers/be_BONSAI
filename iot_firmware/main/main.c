@@ -25,10 +25,10 @@
 static const char *TAG = "IoT_Plant";
 static const uint64_t wakeup_time_sec_us = 3 * 60 * 1000 * 1000;
 
-wifi_client_config_t wc_config = {
+wificlient_config_t wc_config = {
   // .power_save = WIFI_PS_NONE,
-  .power_save = WIFI_PS_MIN_MODEM,
-  // .power_save = WIFI_PS_MAX_MODEM
+  // .power_save = WIFI_PS_MIN_MODEM,
+  .power_save = WIFI_PS_MAX_MODEM
 };
 
 awsclient_config_t awsconfig = {
@@ -75,9 +75,9 @@ void app_main(void)
     esp_err_t rtn;
     uint8_t retry = 0;
     // WIFI
-    wifi_client_init(&wc_config);
+    wificlient_init(&wc_config);
     do {
-      rtn = wifi_client_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
+      rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
       retry++;
       if (retry > 10) {
         break;
@@ -123,7 +123,7 @@ void app_main(void)
       awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
     }
 
-    wifi_client_deinit();
+    wificlient_deinit();
     // sleep
     goto_sleep();
   }
