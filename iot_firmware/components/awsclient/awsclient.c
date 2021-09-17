@@ -104,7 +104,7 @@ void awsclient_shadow_update(awsclient_config_t *config, char *jsonBuffer, size_
   res = aws_iot_shadow_update(&s_aws_client, config->shadow_connect_params.pMyThingName, jsonBuffer,
                               shadow_update_status_cb, NULL, config->timeout_sec, true);
   if (res != SUCCESS) {
-    ESP_LOGE(TAG, "aws_iot_shadow_init_json_document failed");
+    ESP_LOGE(TAG, "aws_iot_shadow_update failed: return value = %d", res);
     // abort();
     return;
   }
