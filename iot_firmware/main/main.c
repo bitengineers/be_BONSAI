@@ -6,8 +6,11 @@
 
 #include "esp_system.h"
 #include "nvs_flash.h"
-#include "esp_sleep.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
+#include "esp_task_wdt.h"
+#include "esp_pm.h"
+#include "esp_sleep.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 
@@ -51,10 +54,10 @@ awsclient_config_t awsconfig = {
 };
 
 char jsonDocumentBuffer[JSON_BUFFER_MAX_LENGTH];
-static int s_main_aws_initialized = 0;
 
+static void app_pm_config(void);
 static void goto_sleep(void);
-
+static void wakeup_cause();
 
 void app_main(void)
 {
@@ -68,68 +71,105 @@ void app_main(void)
     err = nvs_flash_init();
   }
 
+  // Power Mgmt
+  app_pm_config();
+
   // PMU
   axp192_init();
 
-  while (1) {
-    esp_err_t rtn;
-    uint8_t retry = 0;
-    // WIFI
-    wificlient_init(&wc_config);
-    do {
-      rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
-      retry++;
-      if (retry > 10) {
-        break;
-      }
-    } while (rtn != ESP_OK);
+  // WIFI
+  esp_err_t rtn;
+  uint8_t retry = 0;
+  // WIFI
+  wificlient_init(&wc_config);
+  do {
+    rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
+    retry++;
+    if (retry > 10) {
+      break;
+    }
+  } while (rtn != ESP_OK);
 
-    if (rtn == ESP_OK) {
-      if (!s_main_aws_initialized) {
-        // AWS
-        awsclient_shadow_init(&awsconfig);
-        s_main_aws_initialized = 1;
-      }
+  // AWS
+  awsclient_shadow_init(&awsconfig);
+  while (true) {
+    // AWS
+    awsclient_shadow_connect(&awsconfig);
 
-      // Update sensor values...
-      // 1. Soil sensor
-      //    Enable 5V output
-      axp192_exten(true);
-      soilsensor_init();
-      //    Wait a second, to acquire precise value
-      vTaskDelay(pdMS_TO_TICKS(3000));
-      uint16_t soil_value = soilsensor_get_value();
-      axp192_exten(false);
-      ESP_LOGI(TAG, "adc output = %d\n", soil_value);
+    // Update sensor values...
+    // 1. Soil sensor
+    //    Enable 5V output
+    axp192_exten(true);
+    soilsensor_init();
+    //    Wait a second, to acquire precise value
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    uint16_t soil_value = soilsensor_get_value();
+    axp192_exten(false);
+    ESP_LOGI(TAG, "adc output = %d\n", soil_value);
 
-      // create json objects
-      size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
-      aws_iot_shadow_init_json_document(jsonDocumentBuffer,
-                                        jsonDocumentBufferSize);
-      struct jsonStruct soil;
-      soil.cb = NULL;
-      soil.pData = &soil_value;
-      soil.dataLength = sizeof(uint16_t);
-      soil.pKey = "soil_value";
-      soil.type = SHADOW_JSON_UINT16;
+    // create json objects
+    size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
+    aws_iot_shadow_init_json_document(jsonDocumentBuffer,
+                                      jsonDocumentBufferSize);
+    struct jsonStruct soil;
+    soil.cb = NULL;
+    soil.pData = &soil_value;
+    soil.dataLength = sizeof(uint16_t);
+    soil.pKey = "soil_value";
+    soil.type = SHADOW_JSON_UINT16;
 
-      aws_iot_shadow_add_reported(jsonDocumentBuffer,
-                                  jsonDocumentBufferSize,
-                                  1, &soil);
-      aws_iot_finalize_json_document(jsonDocumentBuffer,
-                                     jsonDocumentBufferSize);
-      ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);
-      // AWS update shadow
+    aws_iot_shadow_add_reported(jsonDocumentBuffer,
+                                jsonDocumentBufferSize,
+                                1, &soil);
+    aws_iot_finalize_json_document(jsonDocumentBuffer,
+                                   jsonDocumentBufferSize);
+    ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);
+    // AWS update shadow
+    awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
+    ESP_LOGI(TAG, "awsclient_shadow_update returns %d\n", awsclient_err());
+    if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) {
+      awsclient_shadow_init(&awsconfig);
       awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
+    } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) {
+      wificlient_deinit();
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      wificlient_init(&wc_config);
     }
 
-    wificlient_deinit();
     // sleep
     goto_sleep();
+    esp_task_wdt_reset();
   }
+
+  wificlient_deinit();
 }
 
-static void goto_sleep(void) {
+
+static void app_pm_config(void)
+{
+#if CONFIG_PM_ENABLE
+    // Configure dynamic frequency scaling:
+    // maximum and minimum frequencies are set in sdkconfig,
+    // automatic light sleep is enabled if tickless idle support is enabled.
+#if CONFIG_IDF_TARGET_ESP32
+    esp_pm_config_esp32_t pm_config = {
+#elif CONFIG_IDF_TARGET_ESP32S2
+    esp_pm_config_esp32s2_t pm_config = {
+#elif CONFIG_IDF_TARGET_ESP32C3
+    esp_pm_config_esp32c3_t pm_config = {
+#endif
+            .max_freq_mhz = CONFIG_EXAMPLE_MAX_CPU_FREQ_MHZ,
+            .min_freq_mhz = CONFIG_EXAMPLE_MIN_CPU_FREQ_MHZ,
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+            .light_sleep_enable = true
+#endif
+    };
+    ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
+#endif // CONFIG_PM_ENABLE
+}
+
+static void goto_sleep(void)
+{
   // sleep
   ESP_LOGI(TAG, "preparing sleep");
   //  wake from timer
@@ -143,8 +183,29 @@ static void goto_sleep(void) {
   // wait logging finished
   vTaskDelay(pdMS_TO_TICKS(100));
   esp_light_sleep_start();
+  // disable wake from timer
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
   ESP_LOGI(TAG, "exiting sleep");
+  // disable wake from gpio
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
   rtc_gpio_deinit(WAKE_UP_PIN);
+
+  wakeup_cause();
+static void wakeup_cause()
+{
+  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  switch (cause) {
+  case ESP_SLEEP_WAKEUP_TIMER:
+    ESP_LOGI(TAG, "wake cause by timer");
+    break;
+  case ESP_SLEEP_WAKEUP_GPIO:
+    ESP_LOGI(TAG, "wake cause by GPIO");
+    break;
+  case ESP_SLEEP_WAKEUP_WIFI:
+    ESP_LOGI(TAG, "wake cause by WIFI");
+    break;
+  default:
+    ESP_LOGI(TAG, "wake cause by ???");
+    break;
+  }
 }
