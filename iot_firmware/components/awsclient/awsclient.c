@@ -112,7 +112,7 @@ static void _awsclient_shadow_subscribe_topic(awsclient_config_t *config, char *
 void awsclient_shadow_deinit(awsclient_config_t *config)
 {
   aws_iot_shadow_disconnect(&s_aws_client);
-  s_aws_client = (AWS_IoT_Client){ 0 };
+  aws_iot_mqtt_free(&s_aws_client);
   s_updateInProgress = 0;
   res = FAILURE;
 }
@@ -120,6 +120,7 @@ void awsclient_shadow_deinit(awsclient_config_t *config)
 void awsclient_shadow_update(awsclient_config_t *config, char *jsonBuffer, size_t jsonBufferSize)
 {
   if (!aws_iot_mqtt_is_client_connected(&s_aws_client)) {
+    ESP_LOGI(TAG, "aws_iot_mqtt client was not connected. re-initialize it.");
     aws_iot_mqtt_free(&s_aws_client);
     awsclient_shadow_init(config);
   }

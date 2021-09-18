@@ -25,13 +25,14 @@
 #define WAKE_UP_PIN ((gpio_num_t) 37)
 #define JSON_BUFFER_MAX_LENGTH 255
 
+
 static const char *TAG = "IoT_Plant";
 static const uint64_t wakeup_time_sec_us = 3 * 60 * 1000 * 1000;
 
 wificlient_config_t wc_config = {
   // .power_save = WIFI_PS_NONE,
-  // .power_save = WIFI_PS_MIN_MODEM,
-  .power_save = WIFI_PS_MAX_MODEM
+  .power_save = WIFI_PS_MIN_MODEM,
+  // .power_save = WIFI_PS_MAX_MODEM
 };
 
 awsclient_config_t awsconfig = {
@@ -77,24 +78,19 @@ void app_main(void)
   // PMU
   axp192_init();
 
-  // WIFI
-  esp_err_t rtn;
-  uint8_t retry = 0;
-  // WIFI
-  wificlient_init(&wc_config);
-  do {
-    rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
-    retry++;
-    if (retry > 10) {
-      break;
-    }
-  } while (rtn != ESP_OK);
 
-  // AWS
-  awsclient_shadow_init(&awsconfig);
   while (true) {
-    // AWS
-    awsclient_shadow_connect(&awsconfig);
+    // WIFI
+    esp_err_t rtn;
+    uint8_t retry = 0;
+    wificlient_init(&wc_config);
+    do {
+      rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
+      retry++;
+      if (retry > 10) {
+        break;
+      }
+    } while (rtn != ESP_OK);
 
     // Update sensor values...
     // 1. Soil sensor
@@ -107,6 +103,8 @@ void app_main(void)
     axp192_exten(false);
     ESP_LOGI(TAG, "adc output = %d\n", soil_value);
 
+    // AWS
+    awsclient_shadow_init(&awsconfig);
     // create json objects
     size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
     aws_iot_shadow_init_json_document(jsonDocumentBuffer,
@@ -136,12 +134,12 @@ void app_main(void)
       wificlient_init(&wc_config);
     }
 
+    awsclient_shadow_deinit(&awsconfig);
+    wificlient_deinit();
     // sleep
     goto_sleep();
-    esp_task_wdt_reset();
+    // esp_task_wdt_reset();
   }
-
-  wificlient_deinit();
 }
 
 
@@ -175,10 +173,12 @@ static void goto_sleep(void)
   //  wake from timer
   esp_sleep_enable_timer_wakeup(wakeup_time_sec_us);
   //  wake from gpio button
-  esp_sleep_enable_gpio_wakeup();
-  rtc_gpio_pulldown_dis(WAKE_UP_PIN);
-  rtc_gpio_pullup_en(WAKE_UP_PIN);
-  esp_sleep_enable_ext0_wakeup(WAKE_UP_PIN, 0);
+  /* esp_sleep_enable_gpio_wakeup(); */
+  /* rtc_gpio_pulldown_dis(WAKE_UP_PIN); */
+  /* rtc_gpio_pullup_en(WAKE_UP_PIN); */
+  /* esp_sleep_enable_ext0_wakeup(WAKE_UP_PIN, 0); */
+  //  wake from wifi
+  // esp_sleep_enable_wifi_wakeup();
   ESP_LOGI(TAG, "entering sleep");
   // wait logging finished
   vTaskDelay(pdMS_TO_TICKS(100));
@@ -187,10 +187,14 @@ static void goto_sleep(void)
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
   ESP_LOGI(TAG, "exiting sleep");
   // disable wake from gpio
-  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
-  rtc_gpio_deinit(WAKE_UP_PIN);
+  /* esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO); */
+  /* rtc_gpio_deinit(WAKE_UP_PIN); */
+  // disable wake from wifi
+  // esp_sleep_disable_wifi_wakeup();
 
   wakeup_cause();
+}
+
 static void wakeup_cause()
 {
   esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
