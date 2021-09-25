@@ -77,7 +77,10 @@ void app_main(void)
 
   // PMU
   axp192_init();
-
+  axp192_chg_set_target_vol(AXP192_VOL_4_2);
+  axp192_chg_set_current(AXP192_CHG_CUR_190);
+  axp192_adc_batt_vol_en(true);
+  axp192_adc_batt_cur_en(true);
 
   while (true) {
     // WIFI
@@ -100,8 +103,18 @@ void app_main(void)
     //    Wait a second, to acquire precise value
     vTaskDelay(pdMS_TO_TICKS(3000));
     uint16_t soil_value = soilsensor_get_value();
-    axp192_exten(false);
+    if (!axp192_is_charging()) {
+      axp192_exten(false);
+    }
     ESP_LOGI(TAG, "adc output = %d\n", soil_value);
+
+    // 2. Battery info
+    uint16_t vol = axp192_batt_vol_get();
+    uint16_t cur = axp192_batt_dischrg_cur_get();
+    uint16_t chrg_cur = axp192_batt_chrg_cur_get();
+    ESP_LOGI(TAG,
+    "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
+             vol, cur, chrg_cur);
 
     // AWS
     awsclient_shadow_init(&awsconfig);
@@ -116,9 +129,28 @@ void app_main(void)
     soil.pKey = "soil_value";
     soil.type = SHADOW_JSON_UINT16;
 
+    struct jsonStruct batt_vol;
+    batt_vol.pKey = "voltage";
+    batt_vol.pData = &vol;
+    batt_vol.dataLength = sizeof(uint16_t);
+    batt_vol.type = SHADOW_JSON_UINT16;
+    batt_vol.cb = NULL;
+    struct jsonStruct batt_cur;
+    batt_cur.pKey = "current";
+    batt_cur.pData = &cur;
+    batt_cur.dataLength = sizeof(uint16_t);
+    batt_cur.type = SHADOW_JSON_UINT16;
+    batt_cur.cb = NULL;
+    struct jsonStruct batt_chrgcur;
+    batt_chrgcur.pKey = "charge_current";
+    batt_chrgcur.pData = &chrg_cur;
+    batt_chrgcur.dataLength = sizeof(uint16_t);
+    batt_chrgcur.type = SHADOW_JSON_UINT16;
+    batt_chrgcur.cb = NULL;
+
     aws_iot_shadow_add_reported(jsonDocumentBuffer,
                                 jsonDocumentBufferSize,
-                                1, &soil);
+                                4, &soil, &batt_vol, &batt_cur, &batt_chrgcur);
     aws_iot_finalize_json_document(jsonDocumentBuffer,
                                    jsonDocumentBufferSize);
     ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);
