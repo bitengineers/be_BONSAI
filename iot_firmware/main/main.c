@@ -100,7 +100,7 @@ void app_main(void)
     //    Enable 5V output
     axp192_exten(true);
     soilsensor_init();
-    //    Wait a second, to acquire precise value
+    //    Wait a few seconds, to acquire precise value
     vTaskDelay(pdMS_TO_TICKS(3000));
     uint16_t soil_value = soilsensor_get_value();
     if (!axp192_is_charging()) {
