@@ -128,7 +128,7 @@ void app_main(void)
     struct jsonStruct device;
     device.cb = NULL;
     device.pData = client_id;
-    device.pKey = "clientId";
+    device.pKey = "client_id";
     device.dataLength = strlen(client_id);
     device.type = SHADOW_JSON_STRING;
     struct jsonStruct soil;
