@@ -51,7 +51,7 @@ awsclient_config_t awsconfig = {
     .mqttClientIdLen = (uint16_t) strlen(CONFIG_AWS_IOT_CLIENT_ID),
     .deleteActionHandler = NULL,
   },
-  .timeout_sec = 10,
+  .timeout_sec = 30,
 };
 
 char jsonDocumentBuffer[JSON_BUFFER_MAX_LENGTH];
