@@ -122,13 +122,21 @@ void app_main(void)
     size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
     aws_iot_shadow_init_json_document(jsonDocumentBuffer,
                                       jsonDocumentBufferSize);
+
+    char *client_id = CONFIG_AWS_IOT_CLIENT_ID;
+
+    struct jsonStruct device;
+    device.cb = NULL;
+    device.pData = client_id;
+    device.pKey = "clientId";
+    device.dataLength = strlen(client_id);
+    device.type = SHADOW_JSON_STRING;
     struct jsonStruct soil;
     soil.cb = NULL;
     soil.pData = &soil_value;
     soil.dataLength = sizeof(uint16_t);
     soil.pKey = "soil_value";
     soil.type = SHADOW_JSON_UINT16;
-
     struct jsonStruct batt_vol;
     batt_vol.pKey = "voltage";
     batt_vol.pData = &vol;
@@ -150,7 +158,7 @@ void app_main(void)
 
     aws_iot_shadow_add_reported(jsonDocumentBuffer,
                                 jsonDocumentBufferSize,
-                                4, &soil, &batt_vol, &batt_cur, &batt_chrgcur);
+                                5, &device, &soil, &batt_vol, &batt_cur, &batt_chrgcur);
     aws_iot_finalize_json_document(jsonDocumentBuffer,
                                    jsonDocumentBufferSize);
     ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);
