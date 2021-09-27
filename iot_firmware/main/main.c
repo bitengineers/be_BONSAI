@@ -27,7 +27,7 @@
 
 
 static const char *TAG = "IoT_Plant";
-static const uint64_t wakeup_time_sec_us = 3 * 60 * 1000 * 1000;
+static const uint64_t wakeup_time_sec_us = 10 * 60 * 1000 * 1000;
 
 wificlient_config_t wc_config = {
   // .power_save = WIFI_PS_NONE,
