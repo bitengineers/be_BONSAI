@@ -18,6 +18,8 @@
 #include "wificlient.h"
 #include "soilsensor.h"
 #include "awsclient.h"
+#include "esp_pahub.h"
+#include "esp_pbhub.h"
 
 #include "main.h"
 
@@ -94,6 +96,10 @@ void app_main(void)
         break;
       }
     } while (rtn != ESP_OK);
+
+    // HUB Init
+    ESP_ERROR_CHECK(pahub_init());
+    ESP_ERROR_CHECK(pahub_ch(PAHUB_DISABLE_CH_ALL));
 
     // Update sensor values...
     // 1. Soil sensor
