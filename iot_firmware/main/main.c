@@ -101,8 +101,16 @@ void app_main(void)
     ESP_ERROR_CHECK(pahub_init());
     ESP_ERROR_CHECK(pahub_ch(PAHUB_DISABLE_CH_ALL));
 
+    // Battery info
+    uint16_t vol = axp192_batt_vol_get();
+    uint16_t cur = axp192_batt_dischrg_cur_get();
+    uint16_t chrg_cur = axp192_batt_chrg_cur_get();
+    ESP_LOGI(TAG,
+    "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
+             vol, cur, chrg_cur);
+
     // Update sensor values...
-    // 1. Soil sensor
+    // Soil sensor
     //    Enable 5V output
     axp192_exten(true);
     soilsensor_init();
@@ -112,15 +120,12 @@ void app_main(void)
     if (!axp192_is_charging()) {
       axp192_exten(false);
     }
-    ESP_LOGI(TAG, "adc output = %d\n", soil_value);
+    ESP_LOGI(TAG, "soil sensor value = %d\n", soil_value);
 
-    // 2. Battery info
-    uint16_t vol = axp192_batt_vol_get();
-    uint16_t cur = axp192_batt_dischrg_cur_get();
-    uint16_t chrg_cur = axp192_batt_chrg_cur_get();
-    ESP_LOGI(TAG,
-    "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
-             vol, cur, chrg_cur);
+    // Light sensor
+    pahub_ch(PAHUB_ENABLE_CH0);
+    uint16_t light_value = pbhub_analog_read(PBHUB_CH0);
+    ESP_LOGI(TAG, "lightvalue  = %d\n", soil_value);
 
     // AWS
     awsclient_shadow_init(&awsconfig);
