@@ -55,7 +55,7 @@ static esp_err_t pahub_write_reg(uint8_t value)
   i2c_master_write_byte(cmd, (PAHUB_I2C_ADDR<<1) | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, value, true);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(1000));
+  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(3000));
   i2c_cmd_link_delete(cmd);
   return err;
 }
@@ -68,7 +68,7 @@ static esp_err_t pahub_read_reg(uint8_t *value)
   i2c_master_write_byte(cmd, (PAHUB_I2C_ADDR<<1) | I2C_MASTER_READ, true);
   i2c_master_read_byte(cmd, value, I2C_MASTER_NACK);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(1000));
+  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(3000));
   i2c_cmd_link_delete(cmd);
   return err;
 }
