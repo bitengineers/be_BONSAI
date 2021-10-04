@@ -10,4 +10,14 @@ menu "Iot Planter Configuration"
         default "testThing"
         help
             AWS IoT Thing Name. Should be unique for every device.
+
+    choice PRODUCT_TYPE
+        prompt "Product Type"
+        default M5STACK_CORE2
+
+        config M5STACK_CORE2
+            bool "Core 2"
+        config M5STICK_C_PLUS
+            bool "C_Plus"
+    endchoice
 endmenu

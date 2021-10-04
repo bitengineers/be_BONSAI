@@ -84,6 +84,12 @@ void app_main(void)
   axp192_adc_batt_vol_en(true);
   axp192_adc_batt_cur_en(true);
 
+  // HUB Init
+  ESP_ERROR_CHECK(pahub_init());
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  err = pahub_ch(PAHUB_DISABLE_CH_ALL);
+  ESP_LOGI(TAG, "pahub_ch disable ALL returns %d", err);
+
   while (true) {
     // WIFI
     esp_err_t rtn;
@@ -96,10 +102,6 @@ void app_main(void)
         break;
       }
     } while (rtn != ESP_OK);
-
-    // HUB Init
-    ESP_ERROR_CHECK(pahub_init());
-    ESP_ERROR_CHECK(pahub_ch(PAHUB_DISABLE_CH_ALL));
 
     // Battery info
     uint16_t vol = axp192_batt_vol_get();
@@ -185,6 +187,7 @@ void app_main(void)
       wificlient_init(&wc_config);
     }
 
+    pahub_deinit();
     awsclient_shadow_deinit(&awsconfig);
     wificlient_deinit();
     // sleep
@@ -223,11 +226,15 @@ static void goto_sleep(void)
   ESP_LOGI(TAG, "preparing sleep");
   //  wake from timer
   esp_sleep_enable_timer_wakeup(wakeup_time_sec_us);
+
+#ifdef CONFIG_M5STICK_C_PLUS
   //  wake from gpio button
-  /* esp_sleep_enable_gpio_wakeup(); */
-  /* rtc_gpio_pulldown_dis(WAKE_UP_PIN); */
-  /* rtc_gpio_pullup_en(WAKE_UP_PIN); */
-  /* esp_sleep_enable_ext0_wakeup(WAKE_UP_PIN, 0); */
+  esp_sleep_enable_gpio_wakeup();
+  rtc_gpio_pulldown_dis(WAKE_UP_PIN);
+  rtc_gpio_pullup_en(WAKE_UP_PIN);
+  esp_sleep_enable_ext0_wakeup(WAKE_UP_PIN, 0);
+#endif // CONFIG_M5STICK_C_PLUS
+
   //  wake from wifi
   // esp_sleep_enable_wifi_wakeup();
   ESP_LOGI(TAG, "entering sleep");
@@ -237,9 +244,11 @@ static void goto_sleep(void)
   // disable wake from timer
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
   ESP_LOGI(TAG, "exiting sleep");
+#ifdef CONFIG_M5STICK_C_PLUS
   // disable wake from gpio
-  /* esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO); */
-  /* rtc_gpio_deinit(WAKE_UP_PIN); */
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+  rtc_gpio_deinit(WAKE_UP_PIN);
+#endif // CONFIG_M5STICK_C_PLUS
   // disable wake from wifi
   // esp_sleep_disable_wifi_wakeup();
 
