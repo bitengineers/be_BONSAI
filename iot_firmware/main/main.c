@@ -20,6 +20,7 @@
 #include "awsclient.h"
 #include "esp_pahub.h"
 #include "esp_pbhub.h"
+#include "sht30.h"
 
 #include "main.h"
 
@@ -129,6 +130,15 @@ void app_main(void)
     uint16_t light_value = pbhub_analog_read(PBHUB_CH0);
     ESP_LOGI(TAG, "lightvalue  = %d\n", soil_value);
 
+    pahub_ch(PAHUB_ENABLE_CH1);
+    uint16_t temperature;
+    uint16_t humidity;
+    for (int i = 0; i < 10; i++) {
+      sht30_read_measured_values(&temperature, &humidity);
+      ESP_LOGI(TAG, "temperature = %d, humidity = %d", temperature, humidity);
+      vTaskDelay(500);
+    }
+
     // AWS
     awsclient_shadow_init(&awsconfig);
     // create json objects
@@ -176,16 +186,16 @@ void app_main(void)
                                    jsonDocumentBufferSize);
     ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);
     // AWS update shadow
-    awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
-    ESP_LOGI(TAG, "awsclient_shadow_update returns %d\n", awsclient_err());
-    if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) {
-      awsclient_shadow_init(&awsconfig);
-      awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
-    } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) {
-      wificlient_deinit();
-      vTaskDelay(pdMS_TO_TICKS(1000));
-      wificlient_init(&wc_config);
-    }
+    /* awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize); */
+    /* ESP_LOGI(TAG, "awsclient_shadow_update returns %d\n", awsclient_err()); */
+    /* if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) { */
+    /*   awsclient_shadow_init(&awsconfig); */
+    /*   awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize); */
+    /* } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) { */
+    /*   wificlient_deinit(); */
+    /*   vTaskDelay(pdMS_TO_TICKS(1000)); */
+    /*   wificlient_init(&wc_config); */
+    /* } */
 
     pahub_deinit();
     awsclient_shadow_deinit(&awsconfig);
