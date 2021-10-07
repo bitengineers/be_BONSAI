@@ -177,14 +177,8 @@ esp_err_t wificlient_wait_for_connected(TickType_t xTicksToWait)
 {
   xEventGroupWaitBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT,
                       false, true, xTicksToWait);
-  if (s_wificlient_has_credentials) {
-    if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT) {
-      return ESP_OK;
-    }
-  } else {
-    if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT|DONE_BIT) {
-      return ESP_OK;
-    }
+  if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT|DONE_BIT) {
+    return ESP_OK;
   }
   return ESP_FAIL;
 }
