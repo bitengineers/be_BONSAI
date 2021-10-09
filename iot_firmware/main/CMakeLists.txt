@@ -1,5 +1,5 @@
 idf_component_register(
-  SRCS "main.c" "app_sleep.c"
+  SRCS "main.c" "app_sleep.c" "app_sensors.c"
   INCLUDE_DIRS "."
   REQUIRES
       nvs_flash
