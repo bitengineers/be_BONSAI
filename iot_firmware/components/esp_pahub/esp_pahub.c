@@ -5,11 +5,13 @@
 
 #include "esp_pahub.h"
 
+#define PAHUB_TAG "PAHUB"
+
 #define PAHUB_SDA (GPIO_NUM_32)
 #define PAHUB_SCL (GPIO_NUM_33)
-#define PAHUB_I2C_CLK (100 * 1000)
+#define PAHUB_I2C_CLK (400 * 1000)
 #define PAHUB_I2C I2C_NUM_1
-#define PAHUB_I2C_ADDR 0x70
+#define PAHUB_I2C_ADDR (0x70)
 
 static esp_err_t pahub_write_reg(uint8_t value);
 static esp_err_t pahub_read_reg(uint8_t *value);
@@ -55,8 +57,9 @@ static esp_err_t pahub_write_reg(uint8_t value)
   i2c_master_write_byte(cmd, (PAHUB_I2C_ADDR<<1) | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, value, true);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(3000));
+  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
+  ESP_LOGI(PAHUB_TAG, "pahub_write_reg returns %d\n", err);
   return err;
 }
 
@@ -68,7 +71,8 @@ static esp_err_t pahub_read_reg(uint8_t *value)
   i2c_master_write_byte(cmd, (PAHUB_I2C_ADDR<<1) | I2C_MASTER_READ, true);
   i2c_master_read_byte(cmd, value, I2C_MASTER_NACK);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(3000));
+  err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
+  ESP_LOGI(PAHUB_TAG, "pahub_read_reg returns %d\n", err);
   return err;
 }

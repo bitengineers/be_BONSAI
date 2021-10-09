@@ -5,11 +5,12 @@
 
 #include "esp_pbhub.h"
 
+#define PBHUB_TAG "PBHUB"
 #define PBHUB_SDA (GPIO_NUM_32)
 #define PBHUB_SCL (GPIO_NUM_33)
 #define PBHUB_I2C_CLK (400 * 1000)
 #define PBHUB_I2C I2C_NUM_1
-#define PBHUB_I2C_ADDR (uint8_t)(0x61<<1)
+#define PBHUB_I2C_ADDR (0x61)
 
 const uint8_t PB_READ_DIGITAL[6][2] = {
   { 0x44, 0x45 },
@@ -63,6 +64,7 @@ esp_err_t pbhub_init(void)
   if (err != ESP_OK) {
     return err;
   }
+  i2c_set_timeout(PBHUB_I2C, 400000);
   return ESP_OK;
 }
 
@@ -77,11 +79,11 @@ uint8_t pbhub_digital_read(pbhub_channel_t ch, pbhub_io_t io)
   uint8_t v = 0x00;
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR << 1 | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, value, true);
   i2c_master_stop(cmd);
   i2c_master_start(cmd);
-  i2c_master_read_byte(cmd, &v, false);
+  i2c_master_read_byte(cmd, &v, I2C_MASTER_NACK);
   i2c_master_stop(cmd);
   i2c_master_cmd_begin(PBHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
@@ -94,9 +96,9 @@ void pbhub_digital_write(pbhub_channel_t ch, pbhub_io_t io, uint8_t value)
   uint8_t v = PB_WRITE_DIGITAL[ch][io];
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR << 1 | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, v, true);
-  i2c_master_write_byte(cmd, value, false);
+  i2c_master_write_byte(cmd, value, true);
   i2c_master_stop(cmd);
   i2c_master_cmd_begin(PBHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
@@ -104,22 +106,23 @@ void pbhub_digital_write(pbhub_channel_t ch, pbhub_io_t io, uint8_t value)
 
 uint16_t pbhub_analog_read(pbhub_channel_t ch)
 {
+  esp_err_t err;
   uint8_t v = PB_READ_ANALOG[ch];
   uint8_t r[2] = { 0x00, 0x00 };
   uint16_t rtn;
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR << 1 | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, v, true);
-  i2c_master_stop(cmd);
+  // i2c_master_stop(cmd);
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR | I2C_MASTER_READ, true);
-  i2c_master_read_byte(cmd, r, true);
-  i2c_master_read_byte(cmd, r+1, false);
+  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR << 1 | I2C_MASTER_READ, true);
+  i2c_master_read_byte(cmd, r, I2C_MASTER_ACK);
+  i2c_master_read_byte(cmd, r+1, I2C_MASTER_NACK);
   i2c_master_stop(cmd);
-  i2c_master_cmd_begin(PBHUB_I2C, cmd, pdMS_TO_TICKS(1000));
+  err = i2c_master_cmd_begin(PBHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
-
+  ESP_LOGI(PBHUB_TAG, "pbhub_analog_read: I2C returns %d", err);
   rtn = r[0] + (r[1] << 8);
   return rtn;
 }
@@ -129,9 +132,9 @@ void pbhub_analog_write(pbhub_channel_t ch, pbhub_io_t io, uint16_t value)
   uint8_t v = PB_WRITE_ANALOG[ch][io];
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, PBHUB_I2C_ADDR << 1 | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, v, true);
-  i2c_master_write_byte(cmd, value, I2C_MASTER_NACK);
+  i2c_master_write_byte(cmd, value, true);
   i2c_master_stop(cmd);
   i2c_master_cmd_begin(PBHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
