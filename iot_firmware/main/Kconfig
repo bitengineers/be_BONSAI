@@ -1,23 +1,62 @@
 menu "Iot Planter Configuration"
-    config AWS_IOT_CLIENT_ID
-        string "AWS IoT Client ID"
-        default "testThing"
-        help
-            AWS IoT Client ID. Should be unique for every device.
+  config AWS_IOT_CLIENT_ID
+    string "AWS IoT Client ID"
+    default "testThing"
+    help
+      AWS IoT Client ID. Should be unique for every device.
 
-    config AWS_IOT_THING_NAME
-        string "AWS IoT Thing Name"
-        default "testThing"
-        help
-            AWS IoT Thing Name. Should be unique for every device.
+  config AWS_IOT_THING_NAME
+    string "AWS IoT Thing Name"
+    default "testThing"
+    help
+      AWS IoT Thing Name. Should be unique for every device.
 
-    choice PRODUCT_TYPE
-        prompt "Product Type"
-        default M5STACK_CORE2
+  choice PRODUCT_TYPE
+    prompt "Product Type"
+    default M5STACK_CORE2
+    config M5STACK_CORE2
+      bool "Core 2"
+    config M5STICK_C_PLUS
+      bool "C_Plus"
+  endchoice
 
-        config M5STACK_CORE2
-            bool "Core 2"
-        config M5STICK_C_PLUS
-            bool "C_Plus"
-    endchoice
+  choice PORT_A
+    prompt "PORT_A configuration"
+    default PORT_A_I2C
+    help
+      PORT_A configuration.
+    config PORT_A_EARTH_UNIT
+      bool "PORT_A_EARTH_UNIT"
+    config PORT_A_I2C
+      bool "PORT_A_I2C"
+    config I2C_BAUDRATE
+      int "Baudrate of i2c on port A"
+      depends on PORT_A_I2C
+      default 400000
+    config I2C_TIMEOUT
+      int "Timeout of i2c on port A"
+      depends on PORT_A_I2C
+      default 400000
+    config I2C_PULLUP_ENABLE
+      bool "pullup register enabled"
+      depends on PORT_A_I2C
+      default y
+    config I2C_PORT_A_HAS_PAHUB
+      bool "has connection to PAHUB"
+      depends on PORT_A_I2C
+      default n
+    config I2C_PORT_A_HAS_PBHUB
+      bool "has connection to PBHUB"
+      depends on PORT_A_I2C
+      default n
+    config I2C_SHT30_ON_CH0_ON_PAHUB_ON_PORT_A
+      bool "has sht30 temperature & humodity sensor on CH0 on PAHUB"
+      depends on PORT_A_I2C
+      default n
+    config I2C_SHT30_ON_CH1_ON_PAHUB_ON_PORT_A
+      bool "has sht30 temperature & humodity sensor on CH1 on PAHUB"
+      depends on PORT_A_I2C
+      default n
+  endchoice
+
 endmenu
