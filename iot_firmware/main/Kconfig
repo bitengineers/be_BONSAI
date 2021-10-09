@@ -1,4 +1,4 @@
-menu "Iot Planter Configuration"
+menu "be_BONSAI Configuration"
   config AWS_IOT_CLIENT_ID
     string "AWS IoT Client ID"
     default "testThing"
@@ -49,13 +49,17 @@ menu "Iot Planter Configuration"
       bool "has connection to PBHUB"
       depends on PORT_A_I2C
       default n
-    config I2C_SHT30_ON_CH0_ON_PAHUB_ON_PORT_A
-      bool "has sht30 temperature & humodity sensor on CH0 on PAHUB"
+    config I2C_SHT30_FOR_ENV_ON_CH0_ON_PAHUB_ON_PORT_A
+      bool "has sht30 temperature & humodity sensor on CH0 on PAHUB. It's used for environment."
       depends on PORT_A_I2C
       default n
-    config I2C_SHT30_ON_CH1_ON_PAHUB_ON_PORT_A
-      bool "has sht30 temperature & humodity sensor on CH1 on PAHUB"
+    config I2C_SHT30_FOR_SOIL_ON_CH1_ON_PAHUB_ON_PORT_A
+      bool "has sht30 temperature & humodity sensor on CH1 on PAHUB. It's used for soil."
       depends on PORT_A_I2C
+      default n
+    config LIGHTSENSOR_ON_CH0_ON_PBHUB_ON_PORT_A
+      bool "has lightsensor on CH0 on PBHUB"
+      depends on PORT_A_I2C && I2C_PORT_A_HAS_PBHUB
       default n
   endchoice
 
