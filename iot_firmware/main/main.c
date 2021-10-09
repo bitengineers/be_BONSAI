@@ -23,14 +23,11 @@
 #include "sht30.h"
 
 #include "main.h"
-
+#include "app_sleep.h"
 
 #define WAKE_UP_PIN ((gpio_num_t) 37)
 #define JSON_BUFFER_MAX_LENGTH 255
 
-
-static const char *TAG = "IoT_Plant";
-static const uint64_t wakeup_time_sec_us = 10 * 60 * 1000 * 1000;
 
 wificlient_config_t wc_config = {
   // .power_save = WIFI_PS_NONE,
@@ -60,8 +57,6 @@ awsclient_config_t awsconfig = {
 char jsonDocumentBuffer[JSON_BUFFER_MAX_LENGTH];
 
 static void app_pm_config(void);
-static void goto_sleep(void);
-static void wakeup_cause();
 
 void app_main(void)
 {
@@ -78,20 +73,22 @@ void app_main(void)
   // Power Mgmt
   app_pm_config();
 
-  // PMU
-  axp192_init();
-  axp192_chg_set_target_vol(AXP192_VOL_4_2);
-  axp192_chg_set_current(AXP192_CHG_CUR_190);
-  axp192_adc_batt_vol_en(true);
-  axp192_adc_batt_cur_en(true);
-
-  // HUB Init
-  ESP_ERROR_CHECK(pahub_init());
-  vTaskDelay(pdMS_TO_TICKS(1000));
-  err = pahub_ch(PAHUB_DISABLE_CH_ALL);
-  ESP_LOGI(TAG, "pahub_ch disable ALL returns %d", err);
-
   while (true) {
+    // PMU
+    axp192_init();
+    axp192_chg_set_target_vol(AXP192_VOL_4_2);
+    axp192_chg_set_current(AXP192_CHG_CUR_190);
+    axp192_adc_batt_vol_en(true);
+    axp192_adc_batt_cur_en(true);
+    uint16_t vol = axp192_batt_vol_get();
+    uint16_t cur = axp192_batt_dischrg_cur_get();
+    uint16_t chrg_cur = axp192_batt_chrg_cur_get();
+    axp192_exten(true);
+    ESP_LOGI(TAG,
+    "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
+             vol, cur, chrg_cur);
+    axp192_deinit();
+
     // WIFI
     esp_err_t rtn;
     uint8_t retry = 0;
@@ -104,40 +101,42 @@ void app_main(void)
       }
     } while (rtn != ESP_OK);
 
-    // Battery info
-    uint16_t vol = axp192_batt_vol_get();
-    uint16_t cur = axp192_batt_dischrg_cur_get();
-    uint16_t chrg_cur = axp192_batt_chrg_cur_get();
-    ESP_LOGI(TAG,
-    "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
-             vol, cur, chrg_cur);
-
-    // Update sensor values...
-    // Soil sensor
-    //    Enable 5V output
-    axp192_exten(true);
-    soilsensor_init();
-    //    Wait a few seconds, to acquire precise value
-    vTaskDelay(pdMS_TO_TICKS(3000));
-    uint16_t soil_value = soilsensor_get_value();
-    if (!axp192_is_charging()) {
-      axp192_exten(false);
-    }
-    ESP_LOGI(TAG, "soil sensor value = %d\n", soil_value);
-
     // Light sensor
-    pahub_ch(PAHUB_ENABLE_CH0);
-    uint16_t light_value = pbhub_analog_read(PBHUB_CH0);
-    ESP_LOGI(TAG, "lightvalue  = %d\n", soil_value);
+    // HUB Init
+    ESP_ERROR_CHECK(pahub_init());
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    err = pahub_ch(PAHUB_DISABLE_CH_ALL);
+    ESP_LOGI(TAG, "pahub_ch disable ALL returns %d", err);
+    err = pahub_ch(PAHUB_ENABLE_CH0);
+    ESP_LOGI(TAG, "pahub_ch enable ch0 returns %d", err);
+    err = pahub_ch(PAHUB_ENABLE_CH1);
+    ESP_LOGI(TAG, "pahub_ch enable ch1 returns %d", err);
+    pahub_deinit();
 
-    pahub_ch(PAHUB_ENABLE_CH1);
-    uint16_t temperature;
-    uint16_t humidity;
-    for (int i = 0; i < 10; i++) {
-      sht30_read_measured_values(&temperature, &humidity);
-      ESP_LOGI(TAG, "temperature = %d, humidity = %d", temperature, humidity);
-      vTaskDelay(500);
-    }
+    pbhub_init();
+    vTaskDelay(pdMS_TO_TICKS(500));
+    uint16_t light_value = pbhub_analog_read(PBHUB_CH0);
+    ESP_LOGI(TAG, "light_value  = %d\n", light_value);
+    pbhub_deinit();
+
+    pahub_init();
+    /* uint16_t soil_value = pbhub_analog_read(PBHUB_CH1); */
+    /* ESP_LOGI(TAG, "soil_value  = %d\n", soil_value); */
+    /* vTaskDelay(pdMS_TO_TICKS(500)); */
+    uint16_t temperature = 0;
+    uint16_t humidity = 0;
+    sht30_read_measured_values(&temperature, &humidity);
+    ESP_LOGI(TAG, "temperature = %0.2f, humidity = %0.2f", sht30_calc_celsius(temperature), sht30_calc_relative_humidity(humidity));
+    vTaskDelay(pdMS_TO_TICKS(500));
+    err = pahub_ch(PAHUB_DISABLE_CH_ALL);
+    ESP_LOGI(TAG, "pahub_ch disable ALL returns %d", err);
+    err = pahub_ch(PAHUB_ENABLE_CH2);
+    ESP_LOGI(TAG, "pahub_ch enable ch1 returns %d", err);
+    uint16_t soil_temperature = 0;
+    uint16_t soil_humidity = 0;
+    sht30_read_measured_values(&soil_temperature, &soil_humidity);
+    ESP_LOGI(TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", sht30_calc_celsius(soil_temperature), sht30_calc_relative_humidity(soil_humidity));
+    pahub_deinit();
 
     // AWS
     awsclient_shadow_init(&awsconfig);
@@ -154,12 +153,24 @@ void app_main(void)
     device.pKey = "client_id";
     device.dataLength = strlen(client_id);
     device.type = SHADOW_JSON_STRING;
-    struct jsonStruct soil;
-    soil.cb = NULL;
-    soil.pData = &soil_value;
-    soil.dataLength = sizeof(uint16_t);
-    soil.pKey = "soil_value";
-    soil.type = SHADOW_JSON_UINT16;
+    /* struct jsonStruct soil; */
+    /* soil.cb = NULL; */
+    /* soil.pData = &soil_value; */
+    /* soil.dataLength = sizeof(uint16_t); */
+    /* soil.pKey = "soil_value"; */
+    /* soil.type = SHADOW_JSON_UINT16; */
+    struct jsonStruct soil_temp;
+    soil_temp.cb = NULL;
+    soil_temp.pData = &soil_temperature;
+    soil_temp.dataLength = sizeof(uint16_t);
+    soil_temp.pKey = "soil_temperature";
+    soil_temp.type = SHADOW_JSON_UINT16;
+    struct jsonStruct soil_hum;
+    soil_hum.cb = NULL;
+    soil_hum.pData = &soil_humidity;
+    soil_hum.dataLength = sizeof(uint16_t);
+    soil_hum.pKey = "soil_humidity";
+    soil_hum.type = SHADOW_JSON_UINT16;
     struct jsonStruct batt_vol;
     batt_vol.pKey = "voltage";
     batt_vol.pData = &vol;
@@ -181,28 +192,31 @@ void app_main(void)
 
     aws_iot_shadow_add_reported(jsonDocumentBuffer,
                                 jsonDocumentBufferSize,
-                                5, &device, &soil, &batt_vol, &batt_cur, &batt_chrgcur);
+                                6, &device, &soil_temp, &soil_hum, &batt_vol, &batt_cur, &batt_chrgcur);
     aws_iot_finalize_json_document(jsonDocumentBuffer,
                                    jsonDocumentBufferSize);
     ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);
     // AWS update shadow
-    /* awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize); */
-    /* ESP_LOGI(TAG, "awsclient_shadow_update returns %d\n", awsclient_err()); */
-    /* if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) { */
-    /*   awsclient_shadow_init(&awsconfig); */
-    /*   awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize); */
-    /* } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) { */
-    /*   wificlient_deinit(); */
-    /*   vTaskDelay(pdMS_TO_TICKS(1000)); */
-    /*   wificlient_init(&wc_config); */
-    /* } */
+    awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
+    ESP_LOGI(TAG, "awsclient_shadow_update returns %d\n", awsclient_err());
+    if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) {
+      awsclient_shadow_init(&awsconfig);
+      awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
+    } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) {
+      wificlient_deinit();
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      wificlient_init(&wc_config);
+    }
 
-    pahub_deinit();
     awsclient_shadow_deinit(&awsconfig);
     wificlient_deinit();
+
+    // before sleep
+    app_before_sleep();
     // sleep
-    goto_sleep();
-    // esp_task_wdt_reset();
+    app_goto_sleep();
+    // after wakeup
+    app_after_wakeup();
   }
 }
 
@@ -230,56 +244,3 @@ static void app_pm_config(void)
 #endif // CONFIG_PM_ENABLE
 }
 
-static void goto_sleep(void)
-{
-  // sleep
-  ESP_LOGI(TAG, "preparing sleep");
-  //  wake from timer
-  esp_sleep_enable_timer_wakeup(wakeup_time_sec_us);
-
-#ifdef CONFIG_M5STICK_C_PLUS
-  //  wake from gpio button
-  esp_sleep_enable_gpio_wakeup();
-  rtc_gpio_pulldown_dis(WAKE_UP_PIN);
-  rtc_gpio_pullup_en(WAKE_UP_PIN);
-  esp_sleep_enable_ext0_wakeup(WAKE_UP_PIN, 0);
-#endif // CONFIG_M5STICK_C_PLUS
-
-  //  wake from wifi
-  // esp_sleep_enable_wifi_wakeup();
-  ESP_LOGI(TAG, "entering sleep");
-  // wait logging finished
-  vTaskDelay(pdMS_TO_TICKS(100));
-  esp_light_sleep_start();
-  // disable wake from timer
-  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-  ESP_LOGI(TAG, "exiting sleep");
-#ifdef CONFIG_M5STICK_C_PLUS
-  // disable wake from gpio
-  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
-  rtc_gpio_deinit(WAKE_UP_PIN);
-#endif // CONFIG_M5STICK_C_PLUS
-  // disable wake from wifi
-  // esp_sleep_disable_wifi_wakeup();
-
-  wakeup_cause();
-}
-
-static void wakeup_cause()
-{
-  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-  switch (cause) {
-  case ESP_SLEEP_WAKEUP_TIMER:
-    ESP_LOGI(TAG, "wake cause by timer");
-    break;
-  case ESP_SLEEP_WAKEUP_GPIO:
-    ESP_LOGI(TAG, "wake cause by GPIO");
-    break;
-  case ESP_SLEEP_WAKEUP_WIFI:
-    ESP_LOGI(TAG, "wake cause by WIFI");
-    break;
-  default:
-    ESP_LOGI(TAG, "wake cause by ???");
-    break;
-  }
-}
