@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "driver/i2c.h"
 #include "esp_log.h"
+#include "esp_err.h"
 
 #include "sht30.h"
 
@@ -61,8 +62,8 @@ esp_err_t sht30_read_measured_values(uint16_t *temperature, uint16_t *humidity)
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (SHT30_I2C_ADDR<<1)|I2C_MASTER_WRITE, true);
-  i2c_master_write_byte(cmd, 0x24, true);
-  i2c_master_write_byte(cmd, 0x16, true);
+  i2c_master_write_byte(cmd, 0x2C, true);
+  i2c_master_write_byte(cmd, 0x10, true);
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (SHT30_I2C_ADDR<<1)|I2C_MASTER_READ, true);
   i2c_master_read_byte(cmd, temp, I2C_MASTER_ACK);
@@ -74,12 +75,31 @@ esp_err_t sht30_read_measured_values(uint16_t *temperature, uint16_t *humidity)
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(SHT30_I2C, cmd, pdMS_TO_TICKS(3000));
 
-  ESP_LOGI("sht30", "temp %d(%x, %x), crc %d(%x), check result = %d", (uint8_t)((temp[0]<<8)+temp[1]), temp[0], temp[1], crc[0], crc[0], sht30_check_crc(temp, crc[0]));
-  
-  ESP_LOGI("sht30", "humdity %d(%x, %x), crc %d(%x), check result = %d", (uint8_t)((hum[0]<<8)+hum[1]), hum[0], hum[1], crc[1], crc[1], sht30_check_crc(hum, crc[1]));
+  if (!sht30_check_crc(temp, crc[0])) {
+    ESP_LOGI("sht30", "temp %d(%x, %x), crc %d(%x), check result = %d", (uint8_t)((temp[0]<<8)+temp[1]), temp[0], temp[1], crc[0], crc[0], sht30_check_crc(temp, crc[0]));
+    temp[0] = 0;
+    temp[1] = 0;
+    err = ESP_ERR_INVALID_CRC;
+  }
+
+  if (!sht30_check_crc(hum, crc[1])) {
+    ESP_LOGI("sht30", "humdity %d(%x, %x), crc %d(%x), check result = %d", (uint8_t)((hum[0]<<8)+hum[1]), hum[0], hum[1], crc[1], crc[1], sht30_check_crc(hum, crc[1]));
+    hum[0] = 0;
+    hum[1] = 0;
+  }
   *temperature = (temp[0] << 8) | temp[1];
   *humidity = (hum[0] << 8) | hum[1];
   return err;
+}
+
+float sht30_calc_celsius(uint16_t temp)
+{
+  return -45.0F + 175.0F * (temp/(65536.0F-1));
+}
+
+float sht30_calc_relative_humidity(uint16_t hum)
+{
+  return 100.0F * hum / (65536.0F - 1);
 }
 
 esp_err_t sht30_heater(bool b)
@@ -92,8 +112,8 @@ esp_err_t sht30_heater(bool b)
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (SHT30_I2C_ADDR<<1)|I2C_MASTER_WRITE, true);
-  i2c_master_write_byte(cmd, (uint8_t*)c, true);
-  i2c_master_write_byte(cmd, (uint8_t*)(c+1), true);  
+  i2c_master_write_byte(cmd, c[0], true);
+  i2c_master_write_byte(cmd, c[1], true);
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(SHT30_I2C, cmd, pdMS_TO_TICKS(3000));
   return err;
