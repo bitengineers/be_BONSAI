@@ -146,7 +146,8 @@ static esp_err_t app_sensors_proc_hub(void)
 
 #ifdef CONFIG_I2C_PORT_A_HAS_PBHUB
 #ifdef CONFIG_I2C_PORT_A_HAS_PAHUB
-  pahub_ch(PAHUB_ENABLE_CH5);
+  err = pahub_ch(PAHUB_ENABLE_CH5);
+  ESP_LOGI(APP_SENSORS_TAG, "pahub_ch enable ch5 returns %d", err);
 #endif // CONFIG_I2C_PORT_A_HAS_PAHUB
 #ifdef CONFIG_I2C_PORT_A_HAS_LIGHTSENSOR_VIA_CH0_ON_PBHUB
   light = pbhub_analog_read(PBHUB_CH0);
