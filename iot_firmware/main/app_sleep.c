@@ -1,3 +1,5 @@
+#include "sdkconfig.h"
+
 #include "esp_sleep.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
@@ -35,7 +37,11 @@ void app_goto_sleep(void)
   vTaskDelay(pdMS_TO_TICKS(100));
 
   // sleep
+#if defined(CONFIG_SLEEP_TYPE_LIGHT)
   esp_light_sleep_start();
+#elif defined(CONFIG_SLEEP_TYPE_DEEP)
+  esp_light_deep_start();
+#endif // CONFIG_SLEEP_TYPE_LIGHT
 }
 
 void app_after_wakeup(void)

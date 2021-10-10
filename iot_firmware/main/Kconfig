@@ -62,5 +62,12 @@ menu "be_BONSAI Configuration"
       depends on PORT_A_I2C && I2C_PORT_A_HAS_PBHUB
       default n
   endchoice
-
+  choice SLEEP_TYPE
+    prompt "Sleep type of ESP32"
+    default SLEEP_LIGHT
+    config SLEEP_TYPE_LIGHT
+      bool "Light sleep"
+    config SLEEP_TYPE_DEEP
+      bool "Deep sleep"
+  endchoice
 endmenu
