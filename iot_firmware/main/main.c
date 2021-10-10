@@ -88,6 +88,10 @@ void app_main(void)
       }
     } while (rtn != ESP_OK);
 
+    if (rtn != ESP_OK) {
+      continue;
+    }
+
     // process sensors
     app_sensors_proc();
 
