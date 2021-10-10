@@ -1,10 +1,15 @@
 #include <stdint.h>
 
 #include "sdkconfig.h"
+#include "esp_err.h"
+#include "esp_log.h"
+#include "driver/i2c.h"
 
-#include "esp32_axp192.h"
+#include "axp192.h"
 #include "esp_pahub.h"
 #include "esp_pbhub.h"
+#include "soilsensor.h"
+#include "sht30.h"
 
 #include "app_sensors.h"
 
@@ -16,23 +21,25 @@
 app_sensors_device_t dev;
 app_sensors_data_t env;
 app_sensors_data_t soil;
+uint16_t water_level = 0;
 
+static esp_err_t app_sensors_i2c_init(void);
+static esp_err_t app_sensors_i2c_deinit(void);
 static esp_err_t app_sensors_proc_hub(void);
 static esp_err_t app_sensors_proc_earth_unit(void);
 
 
 esp_err_t app_sensors_proc(void)
 {
-  esp_err_t err;
   // PMU
   axp192_init();
   axp192_chg_set_target_vol(AXP192_VOL_4_2);
   axp192_chg_set_current(AXP192_CHG_CUR_190);
   axp192_adc_batt_vol_en(true);
   axp192_adc_batt_cur_en(true);
-  dev.bat_vol = axp192_batt_vol_get();
-  dev.bat_cur = axp192_batt_dischrg_cur_get();
-  dev.bat_chrg_cur = axp192_batt_chrg_cur_get();
+  dev.bat_vol = axp192_batt_vol_get() * 1.1 / 100;
+  dev.bat_cur = axp192_batt_dischrg_cur_get() * 0.5 / 1000;
+  dev.bat_chrg_cur = axp192_batt_chrg_cur_get() * 0.5 / 1000;
   axp192_exten(true);
   ESP_LOGI(APP_SENSORS_TAG,
            "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
@@ -40,9 +47,13 @@ esp_err_t app_sensors_proc(void)
   axp192_deinit();
 
 #if defined(CONFIG_PORT_A_I2C)
+  ESP_LOGI(APP_SENSORS_TAG, "init I2C");
   app_sensors_proc_hub();
-#else // CONFIG_PORT_A_EARTH_UNIT
+#elif defined(CONFIG_PORT_A_EARTH_UNIT)
+  ESP_LOGI(APP_SENSORS_TAG, "init earth unit");
   app_sensors_proc_earth_unit();
+#else
+  ESP_LOGI(APP_SENSORS_TAG, "no sensors");
 #endif // CONFIG_PORT_A_I2C
 
   return ESP_OK;
@@ -53,9 +64,8 @@ esp_err_t app_sensors_report_as_json(struct jsonStruct *json)
   return ESP_OK;
 }
 
-static esp_err_t app_sensors_proc_hub(void)
+static esp_err_t app_sensors_i2c_init(void)
 {
-
 #if CONFIG_I2C_PULLUP_ENABLE
 #define APP_SENSORS_PULLUP GPIO_PULLUP_ENABLE
 #else
@@ -83,12 +93,23 @@ static esp_err_t app_sensors_proc_hub(void)
   err = i2c_set_timeout(I2C_NUM_1, CONFIG_I2C_TIMEOUT);
   if (err != ESP_OK) {
     ESP_LOGI(APP_SENSORS_TAG, "i2c_set_timeout returns %d\n", err);
-    return err;
   }
 
-#ifdef CONFIG_PORT_A_I2C_HAS_PAHUB
+  return err;
+}
+
+static esp_err_t app_sensors_i2c_deinit(void)
+{
+  return i2c_driver_delete(I2C_NUM_1);
+}
+
+static esp_err_t app_sensors_proc_hub(void)
+{
+  esp_err_t err;
+  app_sensors_i2c_init();
+
+#ifdef CONFIG_I2C_PORT_A_HAS_PAHUB
   // HUB Init
-  ESP_ERROR_CHECK(pahub_init());
   vTaskDelay(pdMS_TO_TICKS(1000));
   err = pahub_ch(PAHUB_DISABLE_CH_ALL);
   ESP_LOGI(APP_SENSORS_TAG, "pahub_ch disable ALL returns %d", err);
@@ -114,15 +135,20 @@ static esp_err_t app_sensors_proc_hub(void)
   soil.temperature = sht30_calc_celsius(soil_temp_raw);
   soil.humidity = sht30_calc_relative_humidity(soil_humidity_raw);
   ESP_LOGI(APP_SENSORS_TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", soil.temperature, soil.humidity);
+  err = pahub_ch(PAHUB_DISABLE_CH_ALL);
 #endif // CONFIG_I2C_SHT30_FOR_SOIL_ON_CH1_ON_PAHUB_ON_PORT_A=y
 
+#endif // CONFIG_I2C_PORT_A_HAS_PAHUB
+
   // HUB Deinit
-  pahub_deinit();
-#endif // CONFIG_PORT_A_I2C_HAS_PAHUB  
+  return app_sensors_i2c_deinit();
 }
 
+#ifdef CONFIG_PORT_A_EARTH_UNIT
 static esp_err_t app_sensors_proc_earth_unit(void)
 {
   soilsensor_init();
+  water_level = soilsensor_get_value();
   return ESP_OK;
 }
+#endif // CONFIG_PORT_A_EARTH_UNIT

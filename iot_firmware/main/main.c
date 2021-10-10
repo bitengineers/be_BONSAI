@@ -23,10 +23,11 @@
 #include "sht30.h"
 
 #include "main.h"
+#include "app_sensors.h"
 #include "app_sleep.h"
 
 #define WAKE_UP_PIN ((gpio_num_t) 37)
-#define JSON_BUFFER_MAX_LENGTH 255
+#define JSON_BUFFER_MAX_LENGTH 511
 
 
 wificlient_config_t wc_config = {
@@ -74,20 +75,6 @@ void app_main(void)
   app_pm_config();
 
   while (true) {
-    // PMU
-    axp192_init();
-    axp192_chg_set_target_vol(AXP192_VOL_4_2);
-    axp192_chg_set_current(AXP192_CHG_CUR_190);
-    axp192_adc_batt_vol_en(true);
-    axp192_adc_batt_cur_en(true);
-    uint16_t vol = axp192_batt_vol_get();
-    uint16_t cur = axp192_batt_dischrg_cur_get();
-    uint16_t chrg_cur = axp192_batt_chrg_cur_get();
-    axp192_exten(true);
-    ESP_LOGI(TAG,
-    "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
-             vol, cur, chrg_cur);
-    axp192_deinit();
 
     // WIFI
     esp_err_t rtn;
@@ -101,42 +88,8 @@ void app_main(void)
       }
     } while (rtn != ESP_OK);
 
-    // Light sensor
-    // HUB Init
-    ESP_ERROR_CHECK(pahub_init());
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    err = pahub_ch(PAHUB_DISABLE_CH_ALL);
-    ESP_LOGI(TAG, "pahub_ch disable ALL returns %d", err);
-    err = pahub_ch(PAHUB_ENABLE_CH0);
-    ESP_LOGI(TAG, "pahub_ch enable ch0 returns %d", err);
-    err = pahub_ch(PAHUB_ENABLE_CH1);
-    ESP_LOGI(TAG, "pahub_ch enable ch1 returns %d", err);
-    pahub_deinit();
-
-    pbhub_init();
-    vTaskDelay(pdMS_TO_TICKS(500));
-    uint16_t light_value = pbhub_analog_read(PBHUB_CH0);
-    ESP_LOGI(TAG, "light_value  = %d\n", light_value);
-    pbhub_deinit();
-
-    pahub_init();
-    /* uint16_t soil_value = pbhub_analog_read(PBHUB_CH1); */
-    /* ESP_LOGI(TAG, "soil_value  = %d\n", soil_value); */
-    /* vTaskDelay(pdMS_TO_TICKS(500)); */
-    uint16_t temperature = 0;
-    uint16_t humidity = 0;
-    sht30_read_measured_values(&temperature, &humidity);
-    ESP_LOGI(TAG, "temperature = %0.2f, humidity = %0.2f", sht30_calc_celsius(temperature), sht30_calc_relative_humidity(humidity));
-    vTaskDelay(pdMS_TO_TICKS(500));
-    err = pahub_ch(PAHUB_DISABLE_CH_ALL);
-    ESP_LOGI(TAG, "pahub_ch disable ALL returns %d", err);
-    err = pahub_ch(PAHUB_ENABLE_CH2);
-    ESP_LOGI(TAG, "pahub_ch enable ch1 returns %d", err);
-    uint16_t soil_temperature = 0;
-    uint16_t soil_humidity = 0;
-    sht30_read_measured_values(&soil_temperature, &soil_humidity);
-    ESP_LOGI(TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", sht30_calc_celsius(soil_temperature), sht30_calc_relative_humidity(soil_humidity));
-    pahub_deinit();
+    // process sensors
+    app_sensors_proc();
 
     // AWS
     awsclient_shadow_init(&awsconfig);
@@ -153,46 +106,58 @@ void app_main(void)
     device.pKey = "client_id";
     device.dataLength = strlen(client_id);
     device.type = SHADOW_JSON_STRING;
-    /* struct jsonStruct soil; */
-    /* soil.cb = NULL; */
-    /* soil.pData = &soil_value; */
-    /* soil.dataLength = sizeof(uint16_t); */
-    /* soil.pKey = "soil_value"; */
-    /* soil.type = SHADOW_JSON_UINT16; */
+    struct jsonStruct waterlevel;
+    waterlevel.cb = NULL;
+    waterlevel.pData = &water_level;
+    waterlevel.dataLength = sizeof(uint16_t);
+    waterlevel.pKey = "soil_value";
+    waterlevel.type = SHADOW_JSON_UINT16;
+    struct jsonStruct env_temp;
+    env_temp.cb = NULL;
+    env_temp.pData = &env.temperature;
+    env_temp.dataLength = sizeof(uint16_t);
+    env_temp.pKey = "env_temperature";
+    env_temp.type = SHADOW_JSON_FLOAT;
+    struct jsonStruct env_hum;
+    env_hum.cb = NULL;
+    env_hum.pData = &env.humidity;
+    env_hum.dataLength = sizeof(uint16_t);
+    env_hum.pKey = "env_humidity";
+    env_hum.type = SHADOW_JSON_FLOAT;
     struct jsonStruct soil_temp;
     soil_temp.cb = NULL;
-    soil_temp.pData = &soil_temperature;
+    soil_temp.pData = &soil.temperature;
     soil_temp.dataLength = sizeof(uint16_t);
     soil_temp.pKey = "soil_temperature";
-    soil_temp.type = SHADOW_JSON_UINT16;
+    soil_temp.type = SHADOW_JSON_FLOAT;
     struct jsonStruct soil_hum;
     soil_hum.cb = NULL;
-    soil_hum.pData = &soil_humidity;
+    soil_hum.pData = &soil.humidity;
     soil_hum.dataLength = sizeof(uint16_t);
     soil_hum.pKey = "soil_humidity";
-    soil_hum.type = SHADOW_JSON_UINT16;
+    soil_hum.type = SHADOW_JSON_FLOAT;
     struct jsonStruct batt_vol;
     batt_vol.pKey = "voltage";
-    batt_vol.pData = &vol;
+    batt_vol.pData = &dev.bat_vol;
     batt_vol.dataLength = sizeof(uint16_t);
-    batt_vol.type = SHADOW_JSON_UINT16;
+    batt_vol.type = SHADOW_JSON_FLOAT;
     batt_vol.cb = NULL;
     struct jsonStruct batt_cur;
     batt_cur.pKey = "current";
-    batt_cur.pData = &cur;
+    batt_cur.pData = &dev.bat_cur;
     batt_cur.dataLength = sizeof(uint16_t);
-    batt_cur.type = SHADOW_JSON_UINT16;
+    batt_cur.type = SHADOW_JSON_FLOAT;
     batt_cur.cb = NULL;
     struct jsonStruct batt_chrgcur;
     batt_chrgcur.pKey = "charge_current";
-    batt_chrgcur.pData = &chrg_cur;
+    batt_chrgcur.pData = &dev.bat_chrg_cur;
     batt_chrgcur.dataLength = sizeof(uint16_t);
-    batt_chrgcur.type = SHADOW_JSON_UINT16;
+    batt_chrgcur.type = SHADOW_JSON_FLOAT;
     batt_chrgcur.cb = NULL;
 
     aws_iot_shadow_add_reported(jsonDocumentBuffer,
                                 jsonDocumentBufferSize,
-                                6, &device, &soil_temp, &soil_hum, &batt_vol, &batt_cur, &batt_chrgcur);
+                                9, &device, &env_temp, &env_hum, &soil_temp, &soil_hum, &batt_vol, &batt_cur, &batt_chrgcur, &waterlevel);
     aws_iot_finalize_json_document(jsonDocumentBuffer,
                                    jsonDocumentBufferSize);
     ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);
