@@ -145,6 +145,9 @@ static esp_err_t app_sensors_proc_hub(void)
 #endif // CONFIG_I2C_PORT_A_HAS_PAHUB
 
 #ifdef CONFIG_I2C_PORT_A_HAS_PBHUB
+#ifdef CONFIG_I2C_PORT_A_HAS_PAHUB
+  pahub_ch(PAHUB_ENABLE_CH5);
+#endif // CONFIG_I2C_PORT_A_HAS_PAHUB
 #ifdef CONFIG_I2C_PORT_A_HAS_LIGHTSENSOR_VIA_CH0_ON_PBHUB
   light = pbhub_analog_read(PBHUB_CH0);
 #endif // CONFIG_I2C_PORT_A_HAS_LIGHTSENSOR_VIA_CH0_ON_PBHUB
@@ -155,9 +158,9 @@ static esp_err_t app_sensors_proc_hub(void)
 
 #endif // CONFIG_I2C_PORT_A_HAS_PBHUB
 
-
   // HUB Deinit
-  return app_sensors_i2c_deinit();
+  err = app_sensors_i2c_deinit();
+  return err;
 }
 
 #ifdef CONFIG_PORT_A_EARTH_UNIT
