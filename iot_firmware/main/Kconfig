@@ -64,10 +64,13 @@ menu "be_BONSAI"
   endchoice
   choice SLEEP_TYPE
     prompt "Sleep type of ESP32"
-    default SLEEP_LIGHT
+    default SLEEP_TYPE_LIGHT
     config SLEEP_TYPE_LIGHT
       bool "Light sleep"
     config SLEEP_TYPE_DEEP
       bool "Deep sleep"
   endchoice
+  config SLEEP_TIMER_TIMEOUT
+      int "Timeout[us] of timer for wakeup interruption. default 10 min"
+      default 600000000
 endmenu

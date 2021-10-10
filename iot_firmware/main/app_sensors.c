@@ -23,11 +23,15 @@ app_sensors_data_t env;
 app_sensors_data_t soil;
 uint16_t water_level = 0;
 
+#ifdef CONFIG_PORT_A_I2C
 static esp_err_t app_sensors_i2c_init(void);
 static esp_err_t app_sensors_i2c_deinit(void);
 static esp_err_t app_sensors_proc_hub(void);
-static esp_err_t app_sensors_proc_earth_unit(void);
+#endif // CONFIG_PORT_A_I2C
 
+#ifdef CONFIG_PORT_A_EARTH_UNIT
+static esp_err_t app_sensors_proc_earth_unit(void);
+#endif // CONFIG_PORT_A_EARTH_UNIT
 
 esp_err_t app_sensors_proc(void)
 {

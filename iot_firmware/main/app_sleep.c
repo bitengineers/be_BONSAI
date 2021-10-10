@@ -11,12 +11,23 @@
 
 #define WAKE_UP_PIN ((gpio_num_t) 37)
 
+#ifdef CONFIG_SLEEP_TIMER_TIMEOUT
+static const uint64_t s_wakeup_time_sec_us = CONFIG_SLEEP_TIMER_TIMEOUT;
+#else
 static const uint64_t s_wakeup_time_sec_us = 10 * 60 * 1000 * 1000;
+#endif // CONFIG_SLEEP_TIMER_TIMEOUT
 
-static void app_before_sleep_stickcplus(void);
+
+#ifdef CONFIG_M5STACK_CORE2
 static void app_before_sleep_core2(void);
-static void app_after_wakeup_stickcplus(void);
 static void app_after_wakeup_core2(void);
+#endif // CONFIG_M5STACK_CORE2
+
+#ifdef CONFIG_M5STICK_C_PLUS
+static void app_before_sleep_stickcplus(void);
+static void app_after_wakeup_stickcplus(void);
+#endif // CONFIG_M5STICK_C_PLUS
+
 static void app_log_wakeup_cause(void);
 
 void app_before_sleep(void)
@@ -59,6 +70,21 @@ void app_after_wakeup(void)
   app_log_wakeup_cause();
 }
 
+
+#ifdef CONFIG_M5STACK_CORE2
+
+static void app_before_sleep_core2(void)
+{
+}
+
+static void app_after_wakeup_core2(void)
+{
+}
+
+#endif // CONFIG_M5STACK_CORE2
+
+#ifdef CONFIG_M5STICK_C_PLUS
+
 static void app_before_sleep_stickcplus(void)
 {
   //  wake from gpio button
@@ -68,10 +94,6 @@ static void app_before_sleep_stickcplus(void)
   esp_sleep_enable_ext0_wakeup(WAKE_UP_PIN, 0);
 }
 
-static void app_before_sleep_core2(void)
-{
-}
-
 static void app_after_wakeup_stickcplus(void)
 {
   // disable wake from gpio
@@ -79,9 +101,7 @@ static void app_after_wakeup_stickcplus(void)
   rtc_gpio_deinit(WAKE_UP_PIN);
 }
 
-static void app_after_wakeup_core2(void)
-{
-}
+#endif // CONFIG_M5STICK_C_PLUS
 
 static void app_log_wakeup_cause()
 {
