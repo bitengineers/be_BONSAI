@@ -1,4 +1,4 @@
-menu "be_BONSAI Configuration"
+menu "be_BONSAI"
   config AWS_IOT_CLIENT_ID
     string "AWS IoT Client ID"
     default "testThing"
