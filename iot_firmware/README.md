@@ -9,12 +9,26 @@ be BONSAI プロジェクトで作成しているデバイスの firmware のソ
 
 ## How to build
 
-configure
+### aws credential files
+
+Place the files which are used to certificate the thing device. 
+Please download them in AWS IoT Core management console, Manage->Things->YOUR THING->Certificates.
+And place the files to locations listed below:
+
+```
+./main/certs/aws-root-ca.pem
+./main/certs/certificate.pem.crt
+./main/certs/private.pem.key
+```
+
+### configure
 
 ```
 idf.py menuconfig
 ```
-以下の内容を入力してください
+
+Please input the values listed below
+
 ```
 Component config --->
   Amazon Web Services IoT Platform --->
@@ -24,12 +38,12 @@ Component config --->
      
   be_BONSAI --->
      AWS IoT Client ID    <= POT NAME by you
-     AWS IoT Thing Name   <= YOUR AWS Thing SETTING
+     AWS IoT Thing Name   <= YOUR AWS Thing Name defined in AWS IoT Core
      Product type         <= Choice M5 device which you use
      PORT_A configuration <= choice
 ```
 
-Build a binary & flash it & show the output log on your console.
+### Build a binary & flash it & show the output log on your console.
 ```
 idf.py build flash monitor
 ```
