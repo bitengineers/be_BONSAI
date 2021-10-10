@@ -110,54 +110,63 @@ void app_main(void)
     waterlevel.cb = NULL;
     waterlevel.pData = &water_level;
     waterlevel.dataLength = sizeof(uint16_t);
-    waterlevel.pKey = "soil_value";
+    waterlevel.pKey = "water_level";
     waterlevel.type = SHADOW_JSON_UINT16;
+    struct jsonStruct env_light;
+    env_light.cb = NULL;
+    env_light.pData = &light;
+    env_light.dataLength = sizeof(uint16_t);
+    env_light.pKey = "env_light";
+    env_light.type = SHADOW_JSON_UINT16;
     struct jsonStruct env_temp;
     env_temp.cb = NULL;
     env_temp.pData = &env.temperature;
-    env_temp.dataLength = sizeof(uint16_t);
+    env_temp.dataLength = sizeof(float);
     env_temp.pKey = "env_temperature";
     env_temp.type = SHADOW_JSON_FLOAT;
     struct jsonStruct env_hum;
     env_hum.cb = NULL;
     env_hum.pData = &env.humidity;
-    env_hum.dataLength = sizeof(uint16_t);
+    env_hum.dataLength = sizeof(float);
     env_hum.pKey = "env_humidity";
     env_hum.type = SHADOW_JSON_FLOAT;
     struct jsonStruct soil_temp;
     soil_temp.cb = NULL;
     soil_temp.pData = &soil.temperature;
-    soil_temp.dataLength = sizeof(uint16_t);
+    soil_temp.dataLength = sizeof(float);
     soil_temp.pKey = "soil_temperature";
     soil_temp.type = SHADOW_JSON_FLOAT;
     struct jsonStruct soil_hum;
     soil_hum.cb = NULL;
     soil_hum.pData = &soil.humidity;
-    soil_hum.dataLength = sizeof(uint16_t);
+    soil_hum.dataLength = sizeof(float);
     soil_hum.pKey = "soil_humidity";
     soil_hum.type = SHADOW_JSON_FLOAT;
     struct jsonStruct batt_vol;
     batt_vol.pKey = "voltage";
     batt_vol.pData = &dev.bat_vol;
-    batt_vol.dataLength = sizeof(uint16_t);
+    batt_vol.dataLength = sizeof(float);
     batt_vol.type = SHADOW_JSON_FLOAT;
     batt_vol.cb = NULL;
     struct jsonStruct batt_cur;
     batt_cur.pKey = "current";
     batt_cur.pData = &dev.bat_cur;
-    batt_cur.dataLength = sizeof(uint16_t);
+    batt_cur.dataLength = sizeof(float);
     batt_cur.type = SHADOW_JSON_FLOAT;
     batt_cur.cb = NULL;
     struct jsonStruct batt_chrgcur;
     batt_chrgcur.pKey = "charge_current";
     batt_chrgcur.pData = &dev.bat_chrg_cur;
-    batt_chrgcur.dataLength = sizeof(uint16_t);
+    batt_chrgcur.dataLength = sizeof(float);
     batt_chrgcur.type = SHADOW_JSON_FLOAT;
     batt_chrgcur.cb = NULL;
 
     aws_iot_shadow_add_reported(jsonDocumentBuffer,
                                 jsonDocumentBufferSize,
-                                9, &device, &env_temp, &env_hum, &soil_temp, &soil_hum, &batt_vol, &batt_cur, &batt_chrgcur, &waterlevel);
+                                10, &device, &env_temp, &env_hum, &env_light,
+                                &soil_temp, &soil_hum,
+                                &batt_vol, &batt_cur, &batt_chrgcur,
+                                &waterlevel);
     aws_iot_finalize_json_document(jsonDocumentBuffer,
                                    jsonDocumentBufferSize);
     ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);

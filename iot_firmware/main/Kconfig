@@ -54,11 +54,15 @@ menu "be_BONSAI"
       depends on PORT_A_I2C
       default n
     config I2C_SHT30_FOR_SOIL_ON_CH1_ON_PAHUB_ON_PORT_A
-      bool "has sht30 temperature & humodity sensor on CH1 on PAHUB. It's used for soil."
+      bool "has sht30 temperature & humodity sensor on CH1 on PAHUB. It's used for soil. (EXPERIMENTAL)"
       depends on PORT_A_I2C
       default n
-    config LIGHTSENSOR_ON_CH0_ON_PBHUB_ON_PORT_A
+    config I2C_PORT_A_HAS_LIGHTSENSOR_VIA_CH0_ON_PBHUB
       bool "has lightsensor on CH0 on PBHUB"
+      depends on PORT_A_I2C && I2C_PORT_A_HAS_PBHUB
+      default n
+    config I2C_PORT_A_HAS_EARTH_SENSOR_VIA_CH1_ON_PBHUB
+      bool "has earth_sensor on CH1 on PBHUB"
       depends on PORT_A_I2C && I2C_PORT_A_HAS_PBHUB
       default n
   endchoice

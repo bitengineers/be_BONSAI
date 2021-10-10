@@ -9,9 +9,9 @@ extern "C" {
 #endif // __cplusplus
 
   typedef struct app_sensors_device {
-    uint16_t bat_vol;
-    uint16_t bat_cur;
-    uint16_t bat_chrg_cur;
+    float bat_vol;
+    float bat_cur;
+    float bat_chrg_cur;
   } app_sensors_device_t;
 
   typedef struct app_sensors_data {
@@ -26,7 +26,7 @@ extern "C" {
   extern uint16_t water_level;
 
   esp_err_t app_sensors_proc(void);
-  esp_err_t app_sensors_report_as_json(struct jsonStruct *json);
+  // esp_err_t app_sensors_report_as_json(struct jsonStruct *json);
 
 #ifdef __cplusplus
 }

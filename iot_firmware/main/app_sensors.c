@@ -22,6 +22,7 @@ app_sensors_device_t dev;
 app_sensors_data_t env;
 app_sensors_data_t soil;
 uint16_t water_level = 0;
+uint16_t light = 0;
 
 #ifdef CONFIG_PORT_A_I2C
 static esp_err_t app_sensors_i2c_init(void);
@@ -41,12 +42,12 @@ esp_err_t app_sensors_proc(void)
   axp192_chg_set_current(AXP192_CHG_CUR_190);
   axp192_adc_batt_vol_en(true);
   axp192_adc_batt_cur_en(true);
-  dev.bat_vol = axp192_batt_vol_get() * 1.1 / 100;
-  dev.bat_cur = axp192_batt_dischrg_cur_get() * 0.5 / 1000;
-  dev.bat_chrg_cur = axp192_batt_chrg_cur_get() * 0.5 / 1000;
+  dev.bat_vol = axp192_batt_vol_get() * 1.1f / 1000.0f;
+  dev.bat_cur = axp192_batt_dischrg_cur_get() * 0.5f / 1000.0f;
+  dev.bat_chrg_cur = axp192_batt_chrg_cur_get() * 0.5f / 1000.0f;
   axp192_exten(true);
   ESP_LOGI(APP_SENSORS_TAG,
-           "battery (voltage, current, charge_current) = (%d, %d, %d)\n",
+           "battery (voltage, current, charge_current) = (%0.2f, %0.2f, %0.2f)\n",
            dev.bat_vol, dev.bat_cur, dev.bat_chrg_cur);
   axp192_deinit();
 
@@ -63,10 +64,10 @@ esp_err_t app_sensors_proc(void)
   return ESP_OK;
 }
 
-esp_err_t app_sensors_report_as_json(struct jsonStruct *json)
-{
-  return ESP_OK;
-}
+/* esp_err_t app_sensors_report_as_json(struct jsonStruct *json) */
+/* { */
+/*   return ESP_OK; */
+/* } */
 
 static esp_err_t app_sensors_i2c_init(void)
 {
@@ -141,8 +142,19 @@ static esp_err_t app_sensors_proc_hub(void)
   ESP_LOGI(APP_SENSORS_TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", soil.temperature, soil.humidity);
   err = pahub_ch(PAHUB_DISABLE_CH_ALL);
 #endif // CONFIG_I2C_SHT30_FOR_SOIL_ON_CH1_ON_PAHUB_ON_PORT_A=y
-
 #endif // CONFIG_I2C_PORT_A_HAS_PAHUB
+
+#ifdef CONFIG_I2C_PORT_A_HAS_PBHUB
+#ifdef CONFIG_I2C_PORT_A_HAS_LIGHTSENSOR_VIA_CH0_ON_PBHUB
+  light = pbhub_analog_read(PBHUB_CH0);
+#endif // CONFIG_I2C_PORT_A_HAS_LIGHTSENSOR_VIA_CH0_ON_PBHUB
+
+#ifdef CONFIG_I2C_PORT_A_HAS_EARTH_SENSOR_VIA_CH1_ON_PBHUB
+  water_level = pbhub_analog_read(PBHUB_CH1);
+#endif // CONFIG_I2C_PORT_A_HAS_EARTH_SENSOR_VIA_CH1_ON_PBHUB
+
+#endif // CONFIG_I2C_PORT_A_HAS_PBHUB
+
 
   // HUB Deinit
   return app_sensors_i2c_deinit();
