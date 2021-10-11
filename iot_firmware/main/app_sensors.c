@@ -69,6 +69,7 @@ esp_err_t app_sensors_proc(void)
 /*   return ESP_OK; */
 /* } */
 
+#ifdef CONFIG_PORT_A_I2C
 static esp_err_t app_sensors_i2c_init(void)
 {
 #if CONFIG_I2C_PULLUP_ENABLE
@@ -107,11 +108,15 @@ static esp_err_t app_sensors_i2c_deinit(void)
 {
   return i2c_driver_delete(I2C_NUM_1);
 }
+#endif // CONFIG_PORT_A_I2C
 
 static esp_err_t app_sensors_proc_hub(void)
 {
-  esp_err_t err;
+  esp_err_t err = ESP_OK;
+
+#ifdef CONFIG_PORT_A_I2C
   app_sensors_i2c_init();
+#endif // CONFIG_PORT_A_I2C
 
 #ifdef CONFIG_I2C_PORT_A_HAS_PAHUB
   // HUB Init
@@ -159,9 +164,12 @@ static esp_err_t app_sensors_proc_hub(void)
 
 #endif // CONFIG_I2C_PORT_A_HAS_PBHUB
 
+#ifdef CONFIG_PORT_A_I2C
   // HUB Deinit
   err = app_sensors_i2c_deinit();
+#endif // CONFIG_PORT_A_I2C
   return err;
+
 }
 
 #ifdef CONFIG_PORT_A_EARTH_UNIT
