@@ -51,7 +51,7 @@ void app_goto_sleep(void)
 #if defined(CONFIG_SLEEP_TYPE_LIGHT)
   esp_light_sleep_start();
 #elif defined(CONFIG_SLEEP_TYPE_DEEP)
-  esp_light_deep_start();
+  esp_deep_sleep_start();
 #endif // CONFIG_SLEEP_TYPE_LIGHT
 }
 
