@@ -45,10 +45,12 @@ esp_err_t app_sensors_proc(void)
   dev.bat_vol = axp192_batt_vol_get() * 1.1f / 1000.0f;
   dev.bat_cur = axp192_batt_dischrg_cur_get() * 0.5f / 1000.0f;
   dev.bat_chrg_cur = axp192_batt_chrg_cur_get() * 0.5f / 1000.0f;
-  axp192_exten(true);
   ESP_LOGI(APP_SENSORS_TAG,
            "battery (voltage, current, charge_current) = (%0.2f, %0.2f, %0.2f)\n",
            dev.bat_vol, dev.bat_cur, dev.bat_chrg_cur);
+  axp192_exten(true);
+  // wait stable output of 5V
+  vTaskDelay(1000);
   axp192_deinit();
 
 #if defined(CONFIG_PORT_A_I2C)
@@ -60,6 +62,9 @@ esp_err_t app_sensors_proc(void)
 #else
   ESP_LOGI(APP_SENSORS_TAG, "no sensors");
 #endif // CONFIG_PORT_A_I2C
+  axp192_init();
+  axp192_exten(true);
+  axp192_deinit();
 
   return ESP_OK;
 }
