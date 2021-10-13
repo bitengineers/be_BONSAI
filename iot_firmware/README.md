@@ -43,6 +43,8 @@ Component config --->
      PORT_A configuration <= choice
 ```
 
+[![asciicast](https://asciinema.org/a/Hi96OHjoLSwmzNBZrkwHM655B.svg)](https://asciinema.org/a/Hi96OHjoLSwmzNBZrkwHM655B)
+
 ### Build a binary & flash it & show the output log on your console.
 ```
 idf.py build flash monitor
