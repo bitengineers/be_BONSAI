@@ -60,6 +60,7 @@ static esp_err_t pahub_write_reg(uint8_t value)
   err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
   ESP_LOGI(PAHUB_TAG, "pahub_write_reg returns %d\n", err);
+  i2c_cmd_link_delete(cmd);
   return err;
 }
 
@@ -74,5 +75,6 @@ static esp_err_t pahub_read_reg(uint8_t *value)
   err = i2c_master_cmd_begin(PAHUB_I2C, cmd, pdMS_TO_TICKS(1000));
   i2c_cmd_link_delete(cmd);
   ESP_LOGI(PAHUB_TAG, "pahub_read_reg returns %d\n", err);
+  i2c_cmd_link_delete(cmd);
   return err;
 }
