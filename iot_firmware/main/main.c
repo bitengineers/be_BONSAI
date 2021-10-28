@@ -26,9 +26,7 @@
 #include "app_sensors.h"
 #include "app_sleep.h"
 
-#define WAKE_UP_PIN ((gpio_num_t) 37)
 #define JSON_BUFFER_MAX_LENGTH 511
-
 
 wificlient_config_t wc_config = {
   // .power_save = WIFI_PS_NONE,
