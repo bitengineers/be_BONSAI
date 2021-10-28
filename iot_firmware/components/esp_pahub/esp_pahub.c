@@ -35,7 +35,7 @@ esp_err_t pahub_init(void)
   if (err != ESP_OK) {
     return err;
   }
-  i2c_set_timeout(PAHUB_I2C, 400000);
+  i2c_set_timeout(PAHUB_I2C, pdMS_TO_TICKS(3000));
   return ESP_OK;
 }
 

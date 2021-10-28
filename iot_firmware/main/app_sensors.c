@@ -134,10 +134,18 @@ static esp_err_t app_sensors_proc_hub(void)
   ESP_LOGI(APP_SENSORS_TAG, "pahub_ch enable ch0 returns %d", err);
   uint16_t temp_raw = 0;
   uint16_t humidity_raw = 0;
-  sht30_read_measured_values(&temp_raw, &humidity_raw);
-  env.temperature = sht30_calc_celsius(temp_raw);
-  env.humidity = sht30_calc_relative_humidity(humidity_raw);
-  ESP_LOGI(APP_SENSORS_TAG, "temperature = %0.2f, humidity = %0.2f", env.temperature, env.humidity);
+  uint16_t c = 5;
+  do {
+    err = sht30_read_measured_values(&temp_raw, &humidity_raw);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    c--;
+  } while (c > 0);
+
+  if (err == ESP_OK) {
+    env.temperature = sht30_calc_celsius(temp_raw);
+    env.humidity = sht30_calc_relative_humidity(humidity_raw);
+    ESP_LOGI(APP_SENSORS_TAG, "temperature = %0.2f, humidity = %0.2f", env.temperature, env.humidity);
+  }
   err = pahub_ch(PAHUB_DISABLE_CH_ALL);
 #endif // CONFIG_I2C_SHT30_FOR_ENV_ON_CH0_ON_PAHUB_ON_PORT_A
 
@@ -146,10 +154,18 @@ static esp_err_t app_sensors_proc_hub(void)
   ESP_LOGI(APP_SENSORS_TAG, "pahub_ch enable ch1 returns %d", err);
   uint16_t soil_temp_raw = 0;
   uint16_t soil_humidity_raw = 0;
-  sht30_read_measured_values(&soil_temp_raw, &soil_humidity_raw);
-  soil.temperature = sht30_calc_celsius(soil_temp_raw);
-  soil.humidity = sht30_calc_relative_humidity(soil_humidity_raw);
-  ESP_LOGI(APP_SENSORS_TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", soil.temperature, soil.humidity);
+  c = 5;
+  do {
+    err = sht30_read_measured_values(&soil_temp_raw, &soil_humidity_raw);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    c--;
+  } while (c > 0);
+
+  if (err == ESP_OK) {
+    soil.temperature = sht30_calc_celsius(soil_temp_raw);
+    soil.humidity = sht30_calc_relative_humidity(soil_humidity_raw);
+    ESP_LOGI(APP_SENSORS_TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", soil.temperature, soil.humidity);
+  }
   err = pahub_ch(PAHUB_DISABLE_CH_ALL);
 #endif // CONFIG_I2C_SHT30_FOR_SOIL_ON_CH1_ON_PAHUB_ON_PORT_A=y
 #endif // CONFIG_I2C_PORT_A_HAS_PAHUB

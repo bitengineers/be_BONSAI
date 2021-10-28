@@ -64,7 +64,7 @@ esp_err_t pbhub_init(void)
   if (err != ESP_OK) {
     return err;
   }
-  i2c_set_timeout(PBHUB_I2C, 400000);
+  i2c_set_timeout(PBHUB_I2C, pdMS_TO_TICKS(3000));
   return ESP_OK;
 }
 

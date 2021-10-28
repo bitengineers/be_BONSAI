@@ -41,7 +41,6 @@ esp_err_t sht30_start_measurement(void)
   return err;
 }
 
-
 esp_err_t sht30_wait_measurement(void)
 {
   esp_err_t err = ESP_OK;
@@ -58,7 +57,7 @@ esp_err_t sht30_wait_measurement(void)
 esp_err_t sht30_read_measured_values(uint16_t *temperature, uint16_t *humidity)
 {
   esp_err_t err = ESP_OK;
-  uint8_t code[2] = { 0x20, 0x2F };
+  uint8_t code[2] = { 0x22, 0x36 };
   uint8_t crc[2];
   uint8_t temp[2];
   uint8_t hum[2];
@@ -90,6 +89,7 @@ esp_err_t sht30_read_measured_values(uint16_t *temperature, uint16_t *humidity)
     ESP_LOGI("sht30", "humdity %d(%x, %x), crc %d(%x), check result = %d", (uint8_t)((hum[0]<<8)+hum[1]), hum[0], hum[1], crc[1], crc[1], sht30_check_crc(hum, crc[1]));
     hum[0] = 0;
     hum[1] = 0;
+    err = ESP_ERR_INVALID_CRC;
   }
   *temperature = (temp[0] << 8) | temp[1];
   *humidity = (hum[0] << 8) | hum[1];
