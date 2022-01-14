@@ -92,9 +92,6 @@ static void wificlient_connect_task(void* param)
   //EventBits_t uxBits;
   // Connect WIFI with saved credentials
   if (s_wificlient_has_credentials) {
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
     wifi_config_t wifi_config;
     memset(&wifi_config, 0, sizeof(wifi_config_t));
     memcpy(wifi_config.sta.ssid, s_wificlient_ssid, sizeof(wifi_config.sta.ssid));
@@ -109,6 +106,9 @@ static void wificlient_connect_task(void* param)
     }
     // ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
     ESP_ERROR_CHECK(esp_wifi_connect());
   }
 }
@@ -165,13 +165,25 @@ esp_err_t wificlient_init(wificlient_config_t *config)
 
 esp_err_t wificlient_deinit(void)
 {
-  ESP_ERROR_CHECK(esp_wifi_disconnect());
-  ESP_ERROR_CHECK(esp_wifi_stop());
-  ESP_ERROR_CHECK(esp_wifi_restore());
-  xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
+  esp_wifi_disconnect();
+  esp_wifi_stop();
+  esp_wifi_restore();
+  if (s_wificlient_event_group != NULL) {
+    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
+  }
   return ESP_OK;
 }
 
+esp_err_t wificlient_deinit_with_check(void)
+{
+  ESP_ERROR_CHECK(esp_wifi_disconnect());
+  ESP_ERROR_CHECK(esp_wifi_stop());
+  ESP_ERROR_CHECK(esp_wifi_restore());
+  if (s_wificlient_event_group != NULL) {
+    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
+  }
+  return ESP_OK;
+}
 
 esp_err_t wificlient_wait_for_connected(TickType_t xTicksToWait)
 {
