@@ -41,21 +41,25 @@ menu "be_BONSAI"
       bool "pullup register enabled"
       depends on PORT_A_I2C
       default y
+    config I2C_SHT30
+      bool "has a connection to SHT30 (TODO)"
+      depends on PORT_A_I2C
+      default n
     config I2C_PORT_A_HAS_PAHUB
-      bool "has connection to PAHUB"
+      bool "has a connection to PAHUB"
       depends on PORT_A_I2C
       default n
     config I2C_PORT_A_HAS_PBHUB
-      bool "has connection to PBHUB"
-      depends on PORT_A_I2C
+      bool "has a connection to PBHUB"
+      depends on PORT_A_I2C && I2C_PORT_A_HAS_PAHUB
       default n
     config I2C_SHT30_FOR_ENV_ON_CH0_ON_PAHUB_ON_PORT_A
       bool "has sht30 temperature & humodity sensor on CH0 on PAHUB. It's used for environment."
-      depends on PORT_A_I2C
+      depends on PORT_A_I2C && I2C_PORT_A_HAS_PAHUB
       default n
     config I2C_SHT30_FOR_SOIL_ON_CH1_ON_PAHUB_ON_PORT_A
       bool "has sht30 temperature & humodity sensor on CH1 on PAHUB. It's used for soil. (EXPERIMENTAL)"
-      depends on PORT_A_I2C
+      depends on I2C_PORT_A_HAS_PAHUB
       default n
     config I2C_PORT_A_HAS_LIGHTSENSOR_VIA_CH0_ON_PBHUB
       bool "has lightsensor on CH0 on PBHUB"
@@ -77,4 +81,9 @@ menu "be_BONSAI"
   config SLEEP_TIMER_TIMEOUT
       int "Timeout[us] of timer for wakeup interruption. default 10 min"
       default 600000000
+
+  config WEIGHT_SCALE_PER_BIT
+      string "float value of weight scale per bit"
+      default "0.001"
+
 endmenu
