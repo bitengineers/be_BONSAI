@@ -5,6 +5,7 @@
 #include "sdkconfig.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "nvs_flash.h"
 
@@ -15,6 +16,7 @@
 #include "sht30.h"
 #include "hx711.h"
 
+#include "main.h"
 #include "app_sensors.h"
 
 #define APP_SENSORS_TAG "app_sensors"
@@ -56,11 +58,31 @@ union conv32 {
 esp_err_t app_sensors_init(void)
 {
   esp_err_t err;
+  int need_reset = 0;
   err = nvs_open("app_sensors", NVS_READWRITE, &s_app_sensors_nvs_handle);
   if (err != ESP_OK) {
     s_app_sensors_nvs_handle = 0;
   }
 
+  gpio_config_t reset_config = {
+    .pin_bit_mask = ((uint64_t)0x01 << RESET_PIN),
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+  };
+  gpio_config(&reset_config);
+  for (int i = 0; i < 10; i++) {
+    int j = gpio_get_level(RESET_PIN);
+    ESP_LOGI(TAG, "gpio RESET_PIN level = %d", j);
+    need_reset += j;
+  }
+
+  if (need_reset == 0) {
+    // reset all
+    nvs_erase_all(s_app_sensors_nvs_handle);
+  }
+
+  gpio_reset_pin(RESET_PIN);
   return err;
 }
 
@@ -107,7 +129,7 @@ esp_err_t app_sensors_proc(void)
       for (int i = 0; i < 10; i++) {
         offset += hx711_measure();
       }
-      offset /= 10;
+      offset = 0xffffff&(offset/10);
       e = nvs_set_u32(s_app_sensors_nvs_handle, APP_SENSORS_HX711_KEY_ZERO_OFFSET, offset);
       ESP_LOGI(APP_SENSORS_TAG, "nvs_set_u32 for ZERO_OFFSET returns %d", e);
     }
@@ -137,15 +159,16 @@ esp_err_t app_sensors_proc(void)
   }
 
   ESP_LOGI(APP_SENSORS_TAG, "Wait for HX711 READY...");
-  uint32_t weight_sum = 0;
+  uint32_t w = 0;
   for (int i = 0; i < 10; i++) {
     hx711_wait_for_ready();
-    weight_sum += hx711_measure();
+    w += hx711_measure();
   }
-  weight = weight_sum/10;
-  if (weight > (pow(2, 23)-1)) {
-    weight &= 0x7FFFFF;
-    weight = -1 * (weight + 1);
+
+  weight = w/10;
+  if (w > 0x7fffff) {
+    w = ~w;
+    weight = (w - (uint32_t)0x01000000) & 0xFFFFFF;
   }
 
   hx711_deinit();
