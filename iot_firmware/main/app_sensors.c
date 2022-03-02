@@ -97,10 +97,12 @@ esp_err_t app_sensors_proc(void)
   dev.bat_vol = axp192_batt_vol_get() * 1.1f / 1000.0f;
   dev.bat_cur = axp192_batt_dischrg_cur_get() * 0.5f / 1000.0f;
   dev.bat_chrg_cur = axp192_batt_chrg_cur_get() * 0.5f / 1000.0f;
-  axp192_exten(true);
   ESP_LOGI(APP_SENSORS_TAG,
            "battery (voltage, current, charge_current) = (%0.2f, %0.2f, %0.2f)\n",
            dev.bat_vol, dev.bat_cur, dev.bat_chrg_cur);
+  axp192_exten(true);
+  // wait stable output of 5V
+  vTaskDelay(1000);
   axp192_deinit();
 
 #if defined(CONFIG_PORT_A_I2C)
@@ -112,6 +114,9 @@ esp_err_t app_sensors_proc(void)
 #else
   ESP_LOGI(APP_SENSORS_TAG, "no sensors");
 #endif // CONFIG_PORT_A_I2C
+  axp192_init();
+  axp192_exten(true);
+  axp192_deinit();
 
   hx711_init();
   // first measurement to set gain.
@@ -241,10 +246,18 @@ static esp_err_t app_sensors_proc_hub(void)
   ESP_LOGI(APP_SENSORS_TAG, "pahub_ch enable ch0 returns %d", err);
   uint16_t temp_raw = 0;
   uint16_t humidity_raw = 0;
-  sht30_read_measured_values(&temp_raw, &humidity_raw);
-  env.temperature = sht30_calc_celsius(temp_raw);
-  env.humidity = sht30_calc_relative_humidity(humidity_raw);
-  ESP_LOGI(APP_SENSORS_TAG, "temperature = %0.2f, humidity = %0.2f", env.temperature, env.humidity);
+  uint16_t c = 5;
+  do {
+    err = sht30_read_measured_values(&temp_raw, &humidity_raw);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    c--;
+  } while (c > 0);
+
+  if (err == ESP_OK) {
+    env.temperature = sht30_calc_celsius(temp_raw);
+    env.humidity = sht30_calc_relative_humidity(humidity_raw);
+    ESP_LOGI(APP_SENSORS_TAG, "temperature = %0.2f, humidity = %0.2f", env.temperature, env.humidity);
+  }
   err = pahub_ch(PAHUB_DISABLE_CH_ALL);
 #endif // CONFIG_I2C_SHT30_FOR_ENV_ON_CH0_ON_PAHUB_ON_PORT_A
 
@@ -253,10 +266,18 @@ static esp_err_t app_sensors_proc_hub(void)
   ESP_LOGI(APP_SENSORS_TAG, "pahub_ch enable ch1 returns %d", err);
   uint16_t soil_temp_raw = 0;
   uint16_t soil_humidity_raw = 0;
-  sht30_read_measured_values(&soil_temp_raw, &soil_humidity_raw);
-  soil.temperature = sht30_calc_celsius(soil_temp_raw);
-  soil.humidity = sht30_calc_relative_humidity(soil_humidity_raw);
-  ESP_LOGI(APP_SENSORS_TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", soil.temperature, soil.humidity);
+  c = 5;
+  do {
+    err = sht30_read_measured_values(&soil_temp_raw, &soil_humidity_raw);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    c--;
+  } while (c > 0);
+
+  if (err == ESP_OK) {
+    soil.temperature = sht30_calc_celsius(soil_temp_raw);
+    soil.humidity = sht30_calc_relative_humidity(soil_humidity_raw);
+    ESP_LOGI(APP_SENSORS_TAG, "soil_temperature = %0.2f, soil_humidity = %0.2f", soil.temperature, soil.humidity);
+  }
   err = pahub_ch(PAHUB_DISABLE_CH_ALL);
 #endif // CONFIG_I2C_SHT30_FOR_SOIL_ON_CH1_ON_PAHUB_ON_PORT_A=y
 #endif // CONFIG_I2C_PORT_A_HAS_PAHUB
