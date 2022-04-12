@@ -170,7 +170,7 @@ esp_err_t app_sensors_proc(void)
     w += hx711_measure();
   }
 
-  weight = w/10;
+  w = w/10;
   if (w > 0x7fffff) {
     w = ~w & 0xffffff;
     weight = -1 * w +1;
