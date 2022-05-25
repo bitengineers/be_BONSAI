@@ -78,10 +78,12 @@ void app_main(void)
 
   while (true) {
 
+    // Heap information
+    heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
+
     // WIFI
     esp_err_t rtn;
     uint8_t retry = 0;
-    wificlient_deinit();
     wificlient_init(&wc_config);
     do {
       rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));

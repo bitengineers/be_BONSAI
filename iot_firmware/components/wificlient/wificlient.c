@@ -168,6 +168,7 @@ esp_err_t wificlient_deinit(void)
   esp_wifi_disconnect();
   esp_wifi_stop();
   esp_wifi_restore();
+  esp_wifi_deinit();
   if (s_wificlient_event_group != NULL) {
     xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
   }
