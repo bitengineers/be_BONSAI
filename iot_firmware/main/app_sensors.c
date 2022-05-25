@@ -174,6 +174,8 @@ esp_err_t app_sensors_proc(void)
   if (w > 0x7fffff) {
     w = ~w & 0xffffff;
     weight = -1 * w +1;
+  } else {
+    weight = w;
   }
 
   hx711_deinit();
