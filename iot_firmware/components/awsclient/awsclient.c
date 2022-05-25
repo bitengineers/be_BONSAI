@@ -113,6 +113,7 @@ void awsclient_shadow_deinit(awsclient_config_t *config)
 {
   aws_iot_shadow_disconnect(&s_aws_client);
   aws_iot_mqtt_free(&s_aws_client);
+  aws_iot_shadow_free(&s_aws_client);
   s_updateInProgress = 0;
   res = FAILURE;
 }
