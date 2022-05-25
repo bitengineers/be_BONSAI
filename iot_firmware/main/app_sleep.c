@@ -9,14 +9,12 @@
 #include "main.h"
 #include "app_sleep.h"
 
-#define WAKE_UP_PIN ((gpio_num_t) 37)
 
 #ifdef CONFIG_SLEEP_TIMER_TIMEOUT
 static const uint64_t s_wakeup_time_sec_us = CONFIG_SLEEP_TIMER_TIMEOUT;
 #else
 static const uint64_t s_wakeup_time_sec_us = 10 * 60 * 1000 * 1000;
 #endif // CONFIG_SLEEP_TIMER_TIMEOUT
-
 
 #ifdef CONFIG_M5STACK_CORE2
 static void app_before_sleep_core2(void);

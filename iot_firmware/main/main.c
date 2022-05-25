@@ -21,6 +21,7 @@
 #include "esp_pahub.h"
 #include "esp_pbhub.h"
 #include "sht30.h"
+#include "hx711.h"
 
 #include "main.h"
 #include "app_sensors.h"
@@ -72,11 +73,15 @@ void app_main(void)
   // Power Mgmt
   app_pm_config();
 
+  // init app_sensors
+  app_sensors_init();
+
   while (true) {
 
     // WIFI
     esp_err_t rtn;
     uint8_t retry = 0;
+    wificlient_deinit();
     wificlient_init(&wc_config);
     do {
       rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
@@ -92,13 +97,6 @@ void app_main(void)
 
     // process sensors
     app_sensors_proc();
-
-    // AWS
-    awsclient_shadow_init(&awsconfig);
-    // create json objects
-    size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
-    aws_iot_shadow_init_json_document(jsonDocumentBuffer,
-                                      jsonDocumentBufferSize);
 
     char *client_id = CONFIG_AWS_IOT_CLIENT_ID;
 
@@ -144,6 +142,33 @@ void app_main(void)
     soil_hum.dataLength = sizeof(float);
     soil_hum.pKey = "soil_humidity";
     soil_hum.type = SHADOW_JSON_FLOAT;
+    struct jsonStruct scale_value;
+    scale_value.cb = NULL;
+    scale_value.pData = &weight;
+    scale_value.dataLength = sizeof(int32_t);
+    scale_value.pKey = "weight_value";
+    scale_value.type = SHADOW_JSON_INT32;
+    struct jsonStruct scale_zero_offset;
+    uint32_t zero_offset = hx711_get_zero_offset();
+    scale_zero_offset.cb = NULL;
+    scale_zero_offset.pData = &zero_offset;
+    scale_zero_offset.dataLength = sizeof(uint32_t);
+    scale_zero_offset.pKey = "weight_zero_offset";
+    scale_zero_offset.type = SHADOW_JSON_UINT32;
+    struct jsonStruct scale_gain;
+    uint16_t _scale_gain = 27;
+    scale_gain.cb = NULL;
+    scale_gain.pData = &_scale_gain;
+    scale_gain.dataLength = sizeof(uint16_t);
+    scale_gain.pKey = "weight_gain";
+    scale_gain.type = SHADOW_JSON_UINT16;
+    struct jsonStruct scale_lsb;
+    float lsb = weight_lsb;
+    scale_lsb.cb = NULL;
+    scale_lsb.pData = &lsb;
+    scale_lsb.dataLength = sizeof(float);
+    scale_lsb.pKey = "weight_lsb";
+    scale_lsb.type = SHADOW_JSON_FLOAT;
     struct jsonStruct batt_vol;
     batt_vol.pKey = "voltage";
     batt_vol.pData = &dev.bat_vol;
@@ -163,12 +188,21 @@ void app_main(void)
     batt_chrgcur.type = SHADOW_JSON_FLOAT;
     batt_chrgcur.cb = NULL;
 
+    // AWS
+    awsclient_shadow_init(&awsconfig);
+    // create json objects
+    size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
+    aws_iot_shadow_init_json_document(jsonDocumentBuffer,
+                                      jsonDocumentBufferSize);
+
     aws_iot_shadow_add_reported(jsonDocumentBuffer,
                                 jsonDocumentBufferSize,
-                                10, &device, &env_temp, &env_hum, &env_light,
+                                14,
+                                &device, &env_temp, &env_hum, &env_light,
                                 &soil_temp, &soil_hum,
                                 &batt_vol, &batt_cur, &batt_chrgcur,
-                                &waterlevel);
+                                &waterlevel,
+                                &scale_gain, &scale_zero_offset, &scale_value, &scale_lsb);
     aws_iot_finalize_json_document(jsonDocumentBuffer,
                                    jsonDocumentBufferSize);
     ESP_LOGI(TAG, "json = %s", jsonDocumentBuffer);

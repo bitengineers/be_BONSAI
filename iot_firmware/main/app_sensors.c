@@ -1,28 +1,44 @@
 #include <stdint.h>
+#include <stdlib.h>
+#include <math.h>
 
 #include "sdkconfig.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "nvs_flash.h"
 
 #include "axp192.h"
 #include "esp_pahub.h"
 #include "esp_pbhub.h"
 #include "soilsensor.h"
 #include "sht30.h"
+#include "hx711.h"
 
+#include "main.h"
 #include "app_sensors.h"
 
 #define APP_SENSORS_TAG "app_sensors"
 
+#define APP_SENSORS_HX711_KEY_LSB         (char*) "LSB"
+#define APP_SENSORS_HX711_KEY_ZERO_OFFSET (char*) "Z_OFFSET"
+
 #define PORT_A_SDA (GPIO_NUM_32)
 #define PORT_A_SCL (GPIO_NUM_33)
+
+#define APP_SENSORS_HX711_LSB_DEFAULT  (0.001f)
 
 app_sensors_device_t dev;
 app_sensors_data_t env;
 app_sensors_data_t soil;
 uint16_t water_level = 0;
 uint16_t light = 0;
+int32_t weight = 0;
+float weight_lsb = APP_SENSORS_HX711_LSB_DEFAULT;
+
+static uint32_t weight_initialized = 0;
+static nvs_handle_t s_app_sensors_nvs_handle = 0;
 
 #ifdef CONFIG_PORT_A_I2C
 static esp_err_t app_sensors_i2c_init(void);
@@ -33,6 +49,42 @@ static esp_err_t app_sensors_proc_hub(void);
 #ifdef CONFIG_PORT_A_EARTH_UNIT
 static esp_err_t app_sensors_proc_earth_unit(void);
 #endif // CONFIG_PORT_A_EARTH_UNIT
+
+union conv32 {
+  uint32_t ui32;
+  float f;
+};
+
+esp_err_t app_sensors_init(void)
+{
+  esp_err_t err;
+  int need_reset = 0;
+  err = nvs_open("app_sensors", NVS_READWRITE, &s_app_sensors_nvs_handle);
+  if (err != ESP_OK) {
+    s_app_sensors_nvs_handle = 0;
+  }
+
+  gpio_config_t reset_config = {
+    .pin_bit_mask = ((uint64_t)0x01 << RESET_PIN),
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+  };
+  gpio_config(&reset_config);
+  for (int i = 0; i < 10; i++) {
+    int j = gpio_get_level(RESET_PIN);
+    ESP_LOGI(TAG, "gpio RESET_PIN level = %d", j);
+    need_reset += j;
+  }
+
+  if (need_reset == 0) {
+    // reset all
+    nvs_erase_all(s_app_sensors_nvs_handle);
+  }
+
+  gpio_reset_pin(RESET_PIN);
+  return err;
+}
 
 esp_err_t app_sensors_proc(void)
 {
@@ -66,6 +118,68 @@ esp_err_t app_sensors_proc(void)
   axp192_exten(true);
   axp192_deinit();
 
+  hx711_init();
+  // first measurement to set gain.
+  hx711_measure();
+  if (!weight_initialized) {
+    esp_err_t e;
+    uint32_t offset = 0;
+    uint32_t lsb = 0;
+    union conv32 conv;
+    // offset
+    e = nvs_get_u32(s_app_sensors_nvs_handle, APP_SENSORS_HX711_KEY_ZERO_OFFSET, &offset);
+    ESP_LOGI(APP_SENSORS_TAG, "nvs_get_u32 ZERO_OFFSET returns %d", e);
+    if (e != ESP_OK) {
+      ESP_LOGI(APP_SENSORS_TAG, "Calibrate HX711 Zero Offset\n");
+      for (int i = 0; i < 10; i++) {
+        offset += hx711_measure();
+      }
+      offset = 0xffffff&(offset/10);
+      e = nvs_set_u32(s_app_sensors_nvs_handle, APP_SENSORS_HX711_KEY_ZERO_OFFSET, offset);
+      ESP_LOGI(APP_SENSORS_TAG, "nvs_set_u32 for ZERO_OFFSET returns %d", e);
+    }
+    ESP_LOGI(APP_SENSORS_TAG, "HX711 Zero Offset = %d", offset);
+    hx711_set_zero_offset(offset);
+
+    // weight scale lsb
+    e = nvs_get_u32(s_app_sensors_nvs_handle, APP_SENSORS_HX711_KEY_LSB, &lsb);
+    if (e != ESP_OK) {
+      ESP_LOGI(APP_SENSORS_TAG, "Failed to load lsb\n");
+#ifdef CONFIG_WEIGHT_SCALE_PER_BIT
+      weight_lsb = atof(CONFIG_WEIGHT_SCALE_PER_BIT);
+      ESP_LOGI(APP_SENSORS_TAG, "Used CONFIG_WEIGHT_SCALE_PER_BIT as weight_lsb: %02f", (float)weight_lsb);
+      conv.f = weight_lsb;
+      e = nvs_set_u32(s_app_sensors_nvs_handle, APP_SENSORS_HX711_KEY_LSB, conv.ui32);
+      ESP_LOGI(APP_SENSORS_TAG, "nvs_set_u32 for LSB returns %d", e);
+#else
+      weight_lsb = APP_SENSORS_HX711_LSB_DEFAULT;
+#endif // CONFIG_WEIGHT_SCALE_PER_BIT
+    } else {
+      if (lsb > 0) {
+        conv.ui32 = lsb;
+        weight_lsb = conv.f;
+      }
+    }
+    weight_initialized = 1;
+  }
+
+  ESP_LOGI(APP_SENSORS_TAG, "Wait for HX711 READY...");
+  uint32_t w = 0;
+  for (int i = 0; i < 10; i++) {
+    hx711_wait_for_ready();
+    w += hx711_measure();
+  }
+
+  w = w/10;
+  if (w > 0x7fffff) {
+    w = ~w & 0xffffff;
+    weight = -1 * w +1;
+  } else {
+    weight = w;
+  }
+
+  hx711_deinit();
+  ESP_LOGI(APP_SENSORS_TAG, "HX711 returns %d", weight);
   return ESP_OK;
 }
 

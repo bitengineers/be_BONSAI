@@ -24,7 +24,10 @@ extern "C" {
   extern app_sensors_data_t soil;
   extern uint16_t light;
   extern uint16_t water_level;
+  extern int32_t weight;
+  extern float weight_lsb;
 
+  esp_err_t app_sensors_init(void);
   esp_err_t app_sensors_proc(void);
   // esp_err_t app_sensors_report_as_json(struct jsonStruct *json);
 

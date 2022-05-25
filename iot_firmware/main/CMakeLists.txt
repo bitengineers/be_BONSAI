@@ -11,7 +11,8 @@ idf_component_register(
       esp_pbhub
       sht30
       awsclient
-      esp-aws-iot)
+      esp-aws-iot
+      esp32_hx711)
 
 target_add_binary_data(${COMPONENT_TARGET} "certs/aws-root-ca.pem" TEXT)
 target_add_binary_data(${COMPONENT_TARGET} "certs/certificate.pem.crt" TEXT)
