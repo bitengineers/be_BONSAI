@@ -51,7 +51,7 @@ awsclient_config_t awsconfig = {
     .mqttClientIdLen = (uint16_t) strlen(CONFIG_AWS_IOT_CLIENT_ID),
     .deleteActionHandler = NULL,
   },
-  .timeout_sec = 30,
+  .timeout_sec = 1,
 };
 
 char jsonDocumentBuffer[JSON_BUFFER_MAX_LENGTH];
@@ -76,23 +76,38 @@ void app_main(void)
   // init app_sensors
   app_sensors_init();
 
+  // WIFI
+  esp_err_t rtn;
+  uint8_t retry = 0;
+
+  wificlient_init(&wc_config);
+
+wstart:
+  wificlient_start();
+
+  do {
+    rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
+    retry++;
+    if (retry > 10) {
+      break;
+    }
+  } while (rtn != ESP_OK);
+
+  if (rtn != ESP_OK) {
+    // abort();
+    goto wstart;
+  }
+
+  // AWS
+  awsclient_shadow_init(&awsconfig);
   while (true) {
 
-    // WIFI
-    esp_err_t rtn;
-    uint8_t retry = 0;
-    wificlient_deinit();
-    wificlient_init(&wc_config);
-    do {
-      rtn = wificlient_wait_for_connected(pdMS_TO_TICKS(1000 * 3));
-      retry++;
-      if (retry > 10) {
-        break;
-      }
-    } while (rtn != ESP_OK);
+    // heap dump
+    heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
 
-    if (rtn != ESP_OK) {
-      continue;
+    if (!wificlient_is_connected()) {
+      ESP_LOGI(TAG, "wifi is not connected.");
+      goto wstart;
     }
 
     // process sensors
@@ -188,8 +203,7 @@ void app_main(void)
     batt_chrgcur.type = SHADOW_JSON_FLOAT;
     batt_chrgcur.cb = NULL;
 
-    // AWS
-    awsclient_shadow_init(&awsconfig);
+
     // create json objects
     size_t jsonDocumentBufferSize = sizeof(jsonDocumentBuffer)/sizeof(char);
     aws_iot_shadow_init_json_document(jsonDocumentBuffer,
@@ -209,17 +223,16 @@ void app_main(void)
     // AWS update shadow
     awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
     ESP_LOGI(TAG, "awsclient_shadow_update returns %d\n", awsclient_err());
-    if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) {
-      awsclient_shadow_init(&awsconfig);
-      awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
-    } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) {
-      wificlient_deinit();
-      vTaskDelay(pdMS_TO_TICKS(1000));
-      wificlient_init(&wc_config);
-    }
+    do {
+      awsclient_shadow_yield(&awsconfig);
+      ESP_LOGI(TAG, "awsclient_shadow_yield returns %d\n", awsclient_err());
+    } while (awsclient_err() == MQTT_RX_BUFFER_TOO_SHORT_ERROR);
 
-    awsclient_shadow_deinit(&awsconfig);
-    wificlient_deinit();
+    if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) {
+      // auto reconnect is enabled. ?
+    } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) {
+      // network configuration?
+    }
 
     // before sleep
     app_before_sleep();

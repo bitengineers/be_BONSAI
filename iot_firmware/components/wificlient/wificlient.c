@@ -157,8 +157,6 @@ esp_err_t wificlient_init(wificlient_config_t *config)
     // Smart Config EVENT
   ESP_ERROR_CHECK(esp_event_handler_register(SC_EVENT, ESP_EVENT_ANY_ID, &smart_config_event_handler, NULL));
   s_wificlient_has_credentials = _wificlient_load_credentials();
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  ESP_ERROR_CHECK(esp_wifi_start());
   ESP_LOGI(TAG, "initialized.");
   return ESP_OK;
 }
@@ -177,12 +175,39 @@ esp_err_t wificlient_deinit(void)
 esp_err_t wificlient_deinit_with_check(void)
 {
   ESP_ERROR_CHECK(esp_wifi_disconnect());
+  xEventGroupWaitBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT,
+                      true, true, 100);
   ESP_ERROR_CHECK(esp_wifi_stop());
   ESP_ERROR_CHECK(esp_wifi_restore());
+  ESP_ERROR_CHECK(esp_wifi_deinit());
   if (s_wificlient_event_group != NULL) {
     xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
+    vEventGroupDelete(s_wificlient_event_group);
+    s_wificlient_event_group = NULL;
   }
+  ESP_ERROR_CHECK(esp_event_loop_delete_default());
   return ESP_OK;
+}
+esp_err_t wificlient_start(void)
+{
+  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+  ESP_ERROR_CHECK(esp_wifi_start());
+  return ESP_OK;
+}
+
+esp_err_t wificlient_stop(void)
+{
+  ESP_ERROR_CHECK(esp_wifi_stop());
+  return ESP_OK;
+}
+
+bool wificlient_is_connected(void)
+{
+  if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT|DONE_BIT) {
+    return true;
+  }
+
+  return false;
 }
 
 esp_err_t wificlient_wait_for_connected(TickType_t xTicksToWait)
@@ -263,6 +288,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
   case WIFI_EVENT_STA_DISCONNECTED:
     ESP_LOGI(TAG, "WIFI_EVENT: sta disconnected.");
     xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT);
+    xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 3, NULL);
     break;
   case WIFI_EVENT_STA_BEACON_TIMEOUT:
     ESP_LOGI(TAG, "Station received beacon timeout event.");
@@ -287,6 +313,12 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
       ESP_LOGI(TAG, "\tdhcpc starts");
       esp_netif_dhcpc_start(sta_netif);
     }
+    break;
+  case IP_EVENT_STA_LOST_IP:
+    ESP_LOGI(TAG, "IP_EVENT: Lost IP");
+    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT);
+    ESP_LOGI(TAG, "\tdhcpc stops");
+    esp_netif_dhcpc_stop(sta_netif);
     break;
   default:
     ESP_LOGI(TAG, "IP_EVENT: event_id = %d\n", event_id);

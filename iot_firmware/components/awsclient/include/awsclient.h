@@ -10,7 +10,7 @@
 typedef struct _awsclient_config {
   ShadowInitParameters_t shadow_params;
   ShadowConnectParameters_t shadow_connect_params;
-  uint8_t timeout_sec;
+  uint32_t timeout_sec;
 } awsclient_config_t;
 
 void awsclient_shadow_init(awsclient_config_t *config);
@@ -19,7 +19,11 @@ void awsclient_shadow_deinit(awsclient_config_t *config);
 
 void awsclient_shadow_connect(awsclient_config_t *config);
 
+void awsclient_shadow_disconnect(awsclient_config_t *config);
+
 void awsclient_shadow_update(awsclient_config_t *config, char *jsonBuffer, size_t jsonBufferSize);
+
+void awsclient_shadow_yield(awsclient_config_t *config);
 
 IoT_Error_t awsclient_err(void);
 

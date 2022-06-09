@@ -49,7 +49,6 @@ void awsclient_shadow_init(awsclient_config_t *config)
   if (res != SUCCESS) {
     ESP_LOGE(TAG, "aws_iot_shadow_connect failed: reason = %d", res);
     awsclient_log_error(res);
-    // abort();
     return;
   }
   res = aws_iot_shadow_set_autoreconnect_status(&s_aws_client, true);
@@ -59,6 +58,15 @@ void awsclient_shadow_init(awsclient_config_t *config)
     return;
   }
   awsclient_shadow_subscribe_topics(config);
+}
+
+void awsclient_shadow_deinit(awsclient_config_t *config)
+{
+  aws_iot_shadow_disconnect(&s_aws_client);
+  aws_iot_mqtt_free(&s_aws_client);
+  aws_iot_shadow_free(&s_aws_client);
+  s_updateInProgress = 0;
+  res = FAILURE;
 }
 
 void awsclient_shadow_connect(awsclient_config_t *config)
@@ -83,6 +91,21 @@ void awsclient_shadow_connect(awsclient_config_t *config)
     }
   }
 }
+
+void awsclient_shadow_disconnect(awsclient_config_t *config)
+{
+  IoT_Error_t err;
+  bool isAutoConnectEnabled = aws_iot_is_autoreconnect_enabled(&s_aws_client);
+  if (isAutoConnectEnabled) {
+    err = aws_iot_mqtt_autoreconnect_set_status(&s_aws_client, false);
+    if (err != SUCCESS) {
+      ESP_LOGE(TAG, "awsclient_shadow_disconnect failed. Could not set autoreconnect as false.");
+      res = err;
+    }
+  }
+  aws_iot_shadow_disconnect(&s_aws_client);
+}
+
 
 static void awsclient_shadow_subscribe_topics(awsclient_config_t *config)
 {
@@ -109,21 +132,16 @@ static void _awsclient_shadow_subscribe_topic(awsclient_config_t *config, char *
   }
 }
 
-void awsclient_shadow_deinit(awsclient_config_t *config)
-{
-  aws_iot_shadow_disconnect(&s_aws_client);
-  aws_iot_mqtt_free(&s_aws_client);
-  aws_iot_shadow_free(&s_aws_client);
-  s_updateInProgress = 0;
-  res = FAILURE;
-}
 
 void awsclient_shadow_update(awsclient_config_t *config, char *jsonBuffer, size_t jsonBufferSize)
 {
   if (!aws_iot_mqtt_is_client_connected(&s_aws_client)) {
     ESP_LOGI(TAG, "aws_iot_mqtt client was not connected. re-initialize it.");
-    aws_iot_mqtt_free(&s_aws_client);
-    awsclient_shadow_init(config);
+    res = aws_iot_mqtt_attempt_reconnect(&s_aws_client);
+    if (res != SUCCESS) {
+      // reconnect failed.
+      return;
+    }
   }
   res = aws_iot_shadow_update(&s_aws_client, config->shadow_connect_params.pMyThingName, jsonBuffer,
                               shadow_update_status_cb, NULL, config->timeout_sec, true);
@@ -135,10 +153,21 @@ void awsclient_shadow_update(awsclient_config_t *config, char *jsonBuffer, size_
   s_updateInProgress = true;
 }
 
+void awsclient_shadow_yield(awsclient_config_t *config)
+{
+  res = aws_iot_shadow_yield(&s_aws_client, config->timeout_sec*1000);
+}
+
 void awsclient_shadow_callback(AWS_IoT_Client *pClient, char *pTopicName, uint16_t topicNameLen,
 									  IoT_Publish_Message_Params *pParams, void *pClientData)
 {
-  ESP_LOGI(TAG, "[%s] callback: ", pTopicName);
+  char s[128] = {0};
+  char payload[1024] = {0};
+  snprintf(s, topicNameLen+1, pTopicName);
+  snprintf(payload, pParams->payloadLen+1, (char*)pParams->payload);
+  ESP_LOGI(TAG, "[%s] callback: ", s);
+  ESP_LOGI(TAG, "payload len = %d", pParams->payloadLen);
+  ESP_LOGI(TAG, "payload = %s", payload);
 }
 
 static uint8_t awsclient_is_updating_shadow(void)
