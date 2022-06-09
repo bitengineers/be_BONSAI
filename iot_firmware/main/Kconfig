@@ -77,6 +77,8 @@ menu "be_BONSAI"
       bool "Light sleep"
     config SLEEP_TYPE_DEEP
       bool "Deep sleep"
+    config SLEEP_TYPE_NONE
+      bool "Never sleep"
   endchoice
   config SLEEP_TIMER_TIMEOUT
       int "Timeout[us] of timer for wakeup interruption. default 10 min"

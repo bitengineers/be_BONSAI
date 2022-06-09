@@ -50,6 +50,8 @@ void app_goto_sleep(void)
   esp_light_sleep_start();
 #elif defined(CONFIG_SLEEP_TYPE_DEEP)
   esp_deep_sleep_start();
+#elif defined(CONFIG_SLEEP_TYPE_NONE)
+  vTaskDelay(pdMS_TO_TICKS(s_wakeup_time_sec_us/1000));
 #endif // CONFIG_SLEEP_TYPE_LIGHT
 }
 
