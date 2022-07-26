@@ -228,6 +228,7 @@ static void smartconfig_task(void *parm)
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_V2)); */
   if (!s_wificlient_has_credentials) {
+    ESP_LOGI(TAG, "smartconfig_task start");
     smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_smartconfig_start(&cfg));
 
@@ -245,6 +246,7 @@ static void smartconfig_task(void *parm)
       vTaskDelay(pdMS_TO_TICKS(3000));
     }
   } else {
+    ESP_LOGI(TAG, "connect task start");
     wificlient_connect_task(NULL);
     while (1) {
       uxBits = xEventGroupWaitBits(s_wificlient_event_group,

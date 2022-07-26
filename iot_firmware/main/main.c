@@ -51,7 +51,7 @@ awsclient_config_t awsconfig = {
     .mqttClientIdLen = (uint16_t) strlen(CONFIG_AWS_IOT_CLIENT_ID),
     .deleteActionHandler = NULL,
   },
-  .timeout_sec = 1,
+  .timeout_sec = 10,
 };
 
 char jsonDocumentBuffer[JSON_BUFFER_MAX_LENGTH];
@@ -223,16 +223,24 @@ wstart:
     // AWS update shadow
     awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
     ESP_LOGI(TAG, "awsclient_shadow_update returns %d\n", awsclient_err());
+    if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) {
+      // auto reconnect is enabled. Retry?
+      ESP_LOGI(TAG, "Retry awsclient_shadow_update.");
+      awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
+    } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST || awsclient_err() == MQTT_CONNECTION_ERROR) {
+      // network configuration?
+      goto wstart;
+    } else if (awsclient_err() == MQTT_CLIENT_NOT_IDLE_ERROR) {
+      ESP_LOGI(TAG, "Call yield before shadow_update");
+      awsclient_shadow_yield(&awsconfig);
+      awsclient_shadow_update(&awsconfig, jsonDocumentBuffer, jsonDocumentBufferSize);
+    }
+
     do {
       awsclient_shadow_yield(&awsconfig);
       ESP_LOGI(TAG, "awsclient_shadow_yield returns %d\n", awsclient_err());
     } while (awsclient_err() == MQTT_RX_BUFFER_TOO_SHORT_ERROR);
 
-    if (awsclient_err() == NETWORK_SSL_WRITE_ERROR) {
-      // auto reconnect is enabled. ?
-    } else if (awsclient_err() == NETWORK_ERR_NET_UNKNOWN_HOST) {
-      // network configuration?
-    }
 
     // before sleep
     app_before_sleep();

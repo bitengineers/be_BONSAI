@@ -28,3 +28,5 @@ void awsclient_shadow_yield(awsclient_config_t *config);
 IoT_Error_t awsclient_err(void);
 
 void awsclient_log_error(IoT_Error_t err);
+
+void awsclient_log_client_state(ClientState state);

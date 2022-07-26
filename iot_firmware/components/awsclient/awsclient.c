@@ -13,6 +13,8 @@
 
 #define TAG  "AWSCLIENT"
 
+#define DEBUG_CLIENT_STATE()  awsclient_log_client_state(aws_iot_mqtt_get_client_state(&s_aws_client))
+
 static AWS_IoT_Client s_aws_client;
 static IoT_Error_t res = FAILURE;
 static volatile uint8_t s_updateInProgress = 0;
@@ -73,7 +75,9 @@ void awsclient_shadow_connect(awsclient_config_t *config)
 {
   ShadowConnectParameters_t param = config->shadow_connect_params;
   ESP_LOGI(TAG, "Shadow Connect: thingName = %s, clientId = %s", param.pMyThingName, param.pMqttClientId);
+  DEBUG_CLIENT_STATE();
   res = aws_iot_shadow_connect(&s_aws_client, &param);
+  DEBUG_CLIENT_STATE();
   if (res != SUCCESS) {
     ESP_LOGE(TAG, "aws_iot_shadow_connect failed: reason = %d", res);
     awsclient_log_error(res);
@@ -83,11 +87,14 @@ void awsclient_shadow_connect(awsclient_config_t *config)
   if (res == NETWORK_ATTEMPTING_RECONNECT || res == NETWORK_RECONNECTED  || res == SUCCESS) {
     ESP_LOGI(TAG, "aws_iot_shadow_yeild with param 200.");
     awsclient_log_error(res);
+    DEBUG_CLIENT_STATE();
     res = aws_iot_shadow_yield(&s_aws_client, 200);
+    DEBUG_CLIENT_STATE();
     if (res == NETWORK_ATTEMPTING_RECONNECT || awsclient_is_updating_shadow()) {
       ESP_LOGI(TAG, "aws_iot_shadow_yeild with param 1000.");
       awsclient_log_error(res);
       res = aws_iot_shadow_yield(&s_aws_client, 1000);
+      DEBUG_CLIENT_STATE();
     }
   }
 }
@@ -136,15 +143,24 @@ static void _awsclient_shadow_subscribe_topic(awsclient_config_t *config, char *
 void awsclient_shadow_update(awsclient_config_t *config, char *jsonBuffer, size_t jsonBufferSize)
 {
   if (!aws_iot_mqtt_is_client_connected(&s_aws_client)) {
-    ESP_LOGI(TAG, "aws_iot_mqtt client was not connected. re-initialize it.");
+    ESP_LOGI(TAG, "aws_iot_mqtt client was not connected. re-connect.");
+    DEBUG_CLIENT_STATE();
     res = aws_iot_mqtt_attempt_reconnect(&s_aws_client);
-    if (res != SUCCESS) {
+    DEBUG_CLIENT_STATE();
+    awsclient_log_error(res);
+    if (res == NETWORK_ERR_NET_UNKNOWN_HOST) {
       // reconnect failed.
+      DEBUG_CLIENT_STATE();
+      res = aws_iot_mqtt_disconnect(&s_aws_client);
+      DEBUG_CLIENT_STATE();
+      awsclient_log_error(res);
       return;
     }
   }
+  DEBUG_CLIENT_STATE();
   res = aws_iot_shadow_update(&s_aws_client, config->shadow_connect_params.pMyThingName, jsonBuffer,
                               shadow_update_status_cb, NULL, config->timeout_sec, true);
+  DEBUG_CLIENT_STATE();
   if (res != SUCCESS) {
     ESP_LOGE(TAG, "aws_iot_shadow_update failed: return value = %d", res);
     awsclient_log_error(res);
@@ -155,7 +171,10 @@ void awsclient_shadow_update(awsclient_config_t *config, char *jsonBuffer, size_
 
 void awsclient_shadow_yield(awsclient_config_t *config)
 {
+  DEBUG_CLIENT_STATE();
   res = aws_iot_shadow_yield(&s_aws_client, config->timeout_sec*1000);
+  DEBUG_CLIENT_STATE();
+  awsclient_log_error(res);
 }
 
 void awsclient_shadow_callback(AWS_IoT_Client *pClient, char *pTopicName, uint16_t topicNameLen,
@@ -175,11 +194,9 @@ static uint8_t awsclient_is_updating_shadow(void)
   return s_updateInProgress;
 }
 
-
 IoT_Error_t awsclient_err(void) {
   return res;
 }
-
 
 void shadow_update_status_cb(const char *pThingName, ShadowActions_t action, Shadow_Ack_Status_t status,
                              const char *pReceivedJsonDocument, void *pContextData) {
@@ -439,6 +456,54 @@ void awsclient_log_error(IoT_Error_t err)
 	/** Invalid input topic type */
   case(INVALID_TOPIC_TYPE_ERROR):
     ESP_LOGI(TAG, "INVALID_TOPIC_TYPE_ERROR");
+    break;
+  }
+}
+
+void awsclient_log_client_state(ClientState state)
+{
+  switch (state) {
+  case CLIENT_STATE_INVALID: // 0
+    ESP_LOGI(TAG, "CLIENT_STATE_INVALID");
+    break;
+  case CLIENT_STATE_INITIALIZED: // 1
+    ESP_LOGI(TAG, "CLIENT_STATE_INITIALIZED");
+    break;
+  case CLIENT_STATE_CONNECTING: // 2
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTING");
+    break;
+  case CLIENT_STATE_CONNECTED_IDLE: // 3
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTED_IDLE");
+    break;
+  case CLIENT_STATE_CONNECTED_YIELD_IN_PROGRESS: // 4
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTED_YIELD_IN_PROGRESS");
+    break;
+  case CLIENT_STATE_CONNECTED_PUBLISH_IN_PROGRESS: // 5
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTED_PUBLISH_IN_PROGRESS");
+    break;
+  case CLIENT_STATE_CONNECTED_SUBSCRIBE_IN_PROGRESS: // 6
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTED_SUBSCRIBE_IN_PROGRESS");
+    break;
+  case CLIENT_STATE_CONNECTED_UNSUBSCRIBE_IN_PROGRESS: // 7
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTED_UNSUBSCRIBE_IN_PROGRESS");
+    break;
+  case CLIENT_STATE_CONNECTED_RESUBSCRIBE_IN_PROGRESS: // 8
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTED_RESUBSCRIBE_IN_PROGRESS");
+    break;
+  case CLIENT_STATE_CONNECTED_WAIT_FOR_CB_RETURN: // 9
+    ESP_LOGI(TAG, "CLIENT_STATE_CONNECTED_WAIT_FOR_CB_RETURN");
+    break;
+  case CLIENT_STATE_DISCONNECTING: // 10
+    ESP_LOGI(TAG, "CLIENT_STATE_DISCONNECTING");
+    break;
+  case CLIENT_STATE_DISCONNECTED_ERROR: // 11
+    ESP_LOGI(TAG, "CLIENT_STATE_DISCONNECTED_ERROR");
+    break;
+  case CLIENT_STATE_DISCONNECTED_MANUALLY: // 12
+    ESP_LOGI(TAG, "CLIENT_STATE_DISCONNECTED_MANUALY");
+    break;
+  case CLIENT_STATE_PENDING_RECONNECT: // 13
+    ESP_LOGI(TAG, "CLIENT_STATE_RECONNECT");
     break;
   }
 }
