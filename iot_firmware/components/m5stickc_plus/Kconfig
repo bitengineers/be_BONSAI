@@ -1,0 +1,46 @@
+menu "m5stick_c+"
+  config M5STICKC_PLUS_I2C
+    prompt "Port A Configuration"
+    help
+      Port A configuration
+    config M5STICKC_PLUS_I2C_ENABLE
+      bool "Enable I2C"
+      default n
+
+choice M5STICKC_PLUS_I2C_NUM
+    prompt "I2C instance"
+    depends on M5STICKC_PLUS_I2C_ENABLE
+    default M5STICKC_PLUS_I2C_NUM_0
+    config M5STICKC_PLUS_I2C_NUM_0
+      bool "I2C_NUM_0"
+    config M5STICKC_PLUS_I2C_NUM_1
+      bool "I2C_NUM_1"
+  endchoice
+
+choice M5STICKC_PLUS_I2C_MODE
+    prompt "I2C Mode"
+    depends on M5STICKC_PLUS_I2C_ENABLE
+    default M5STICKC_PLUS_I2C_MASTER
+    config M5STICKC_PLUS_I2C_MASTER
+      bool "master mode"
+    config M5STICKC_PLuS_I2C_SLAVE
+      bool "slave mode"
+  endchoice
+    
+  config M5STICKC_PLUS_I2C_CLK
+    help
+      I2C Baudrate
+    int "Baudrate of i2c on port A"
+    depends on M5STICKC_PLUS_I2C_ENABLE
+    default 400000
+  config M5STICKC_PLUS_I2C_TIMEOUT
+    help
+      I2C timeout
+    int "Timeout for i2c on port A"
+    depends on M5STICKC_PLUS_I2C_ENABLE
+    default 400000
+  config M5STICKC_PLUS_I2C_PULLUP_ENABLE
+    bool "pullup register enabled"
+    depends on M5STICKC_PLUS_I2C_ENABLE
+    default y
+endmenu
