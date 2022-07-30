@@ -7,3 +7,6 @@
 [submodule "iot_firmware/components/esp32_hx711"]
 	path = iot_firmware/components/esp32_hx711
 	url = git@github.com:bitengineers/esp32_hx711.git
+[submodule "iot_firmware/components/m5device"]
+	path = iot_firmware/components/m5device
+	url = git@github.com:bitengineers/m5device.git

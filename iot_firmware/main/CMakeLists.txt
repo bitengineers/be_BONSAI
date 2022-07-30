@@ -13,7 +13,7 @@ idf_component_register(
       awsclient
       esp-aws-iot
       esp32_hx711
-      m5stickc_plus)
+      m5device)
 
 target_add_binary_data(${COMPONENT_TARGET} "certs/aws-root-ca.pem" TEXT)
 target_add_binary_data(${COMPONENT_TARGET} "certs/certificate.pem.crt" TEXT)

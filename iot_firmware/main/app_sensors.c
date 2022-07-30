@@ -17,6 +17,7 @@
 #include "hx711.h"
 
 #include "main.h"
+#include "m5device.h"
 #include "app_sensors.h"
 
 #define APP_SENSORS_TAG "app_sensors"
@@ -191,6 +192,9 @@ esp_err_t app_sensors_proc(void)
 #ifdef CONFIG_PORT_A_I2C
 static esp_err_t app_sensors_i2c_init(void)
 {
+  // m5device
+  m5device_init();
+
 #if CONFIG_I2C_PULLUP_ENABLE
 #define APP_SENSORS_PULLUP GPIO_PULLUP_ENABLE
 #else

@@ -22,6 +22,7 @@
 #include "esp_pbhub.h"
 #include "sht30.h"
 #include "hx711.h"
+#include "m5device.h"
 
 #include "main.h"
 #include "app_sensors.h"
@@ -72,6 +73,9 @@ void app_main(void)
 
   // Power Mgmt
   app_pm_config();
+
+  // m5device
+  m5device_init();
 
   // init app_sensors
   app_sensors_init();

@@ -7,6 +7,7 @@
 #include "esp_err.h"
 
 #include "sht30.h"
+#include "m5device.h"
 
 #define SHT30_I2C      I2C_NUM_1
 #define SHT30_I2C_ADDR 0x44
@@ -18,12 +19,12 @@ static uint8_t sht30_check_crc(uint8_t *buf, uint8_t crc);
 
 esp_err_t sht30_init(void)
 {
-  return ESP_OK;
+  return m5device_init();
 }
 
 esp_err_t sht30_deinit(void)
 {
-  return ESP_OK;
+  return m5device_deinit();
 }
 
 esp_err_t sht30_start_measurement(void)
