@@ -28,7 +28,7 @@
 
 static const char *TAG = "wificlient";
 
-static void smartconfig_task(void *parm);
+static void connect_task(void *parm);
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data);
 static void ip_event_handler(void* arg, esp_event_base_t event_base,
@@ -108,9 +108,10 @@ static void wificlient_connect_task(void* param)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
-
     ESP_ERROR_CHECK(esp_wifi_connect());
   }
+
+  vTaskDelete(NULL);
 }
 
 esp_err_t wificlient_init(wificlient_config_t *config)
@@ -220,7 +221,7 @@ esp_err_t wificlient_wait_for_connected(TickType_t xTicksToWait)
   return ESP_FAIL;
 }
 
-static void smartconfig_task(void *parm)
+static void connect_task(void *parm)
 {
   EventBits_t uxBits;
   ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH));
@@ -228,7 +229,7 @@ static void smartconfig_task(void *parm)
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_V2)); */
   if (!s_wificlient_has_credentials) {
-    ESP_LOGI(TAG, "smartconfig_task start");
+    ESP_LOGI(TAG, "connect_task start");
     smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_smartconfig_start(&cfg));
 
@@ -254,12 +255,13 @@ static void smartconfig_task(void *parm)
       if(uxBits & CONNECTED_BIT) {
         esp_netif_dhcp_status_t dhcp_status;
         ESP_ERROR_CHECK(esp_netif_dhcpc_get_status(sta_netif, &dhcp_status));
-        if (dhcp_status == ESP_NETIF_DHCP_STARTED) {
-          xEventGroupSetBits(s_wificlient_event_group, DONE_BIT);
-          vTaskDelete(NULL);        
+        if (dhcp_status != ESP_NETIF_DHCP_STARTED) {
+          ESP_LOGI(TAG, "connect_task: wifi connected, but DHCP have not started");
         }
+        xEventGroupSetBits(s_wificlient_event_group, DONE_BIT);
+        vTaskDelete(NULL);
       }
-      vTaskDelay(pdMS_TO_TICKS(3000));
+      vTaskDelay(pdMS_TO_TICKS(3));
     }
   }
 }
@@ -279,7 +281,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     break;
   case WIFI_EVENT_STA_START:
     ESP_LOGI(TAG, "WIFI_EVENT: sta started.");
-    xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 3, NULL);
+    xTaskCreate(connect_task, "connect_task", 4096, NULL, 3, NULL);
     break;
   case WIFI_EVENT_STA_STOP:
     ESP_LOGI(TAG, "WIFI_EVENT: sta stoppped.");
@@ -290,7 +292,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
   case WIFI_EVENT_STA_DISCONNECTED:
     ESP_LOGI(TAG, "WIFI_EVENT: sta disconnected.");
     xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT);
-    xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 3, NULL);
+    xTaskCreate(connect_task, "connect_task", 4096, NULL, 3, NULL);
     break;
   case WIFI_EVENT_STA_BEACON_TIMEOUT:
     ESP_LOGI(TAG, "Station received beacon timeout event.");
@@ -319,8 +321,6 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
   case IP_EVENT_STA_LOST_IP:
     ESP_LOGI(TAG, "IP_EVENT: Lost IP");
     xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT);
-    ESP_LOGI(TAG, "\tdhcpc stops");
-    esp_netif_dhcpc_stop(sta_netif);
     break;
   default:
     ESP_LOGI(TAG, "IP_EVENT: event_id = %d\n", event_id);
