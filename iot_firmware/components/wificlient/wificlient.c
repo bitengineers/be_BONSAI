@@ -20,42 +20,52 @@
 #include "wificlient.h"
 
 
-#define WIFICLIENT_KEY_SSID      (char *)"SSID"
-#define WIFICLIENT_KEY_PASSWORD  (char *)"PASSWORD"
-#define WIFICLIENT_KEY_BSSID_SET (char *)"BSSID_SET"
-#define WIFICLIENT_KEY_BSSID     (char *)"BSSID"
-
+#define WIFICELINT_EVQUEUE_NUM   (1)
+#define WIFICELINT_EVQUEUE_TIMEOUT_TICK   (100)
 
 static const char *TAG = "wificlient";
 
 static void connect_task(void *parm);
-static void wifi_event_handler(void* arg, esp_event_base_t event_base,
-                               int32_t event_id, void* event_data);
-static void ip_event_handler(void* arg, esp_event_base_t event_base,
-                               int32_t event_id, void* event_data);
-static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
-                               int32_t event_id, void* event_data);
-
+static void wificlient_connect(void);
+static void wificlient_set_bits( EventGroupHandle_t xEventGroup,
+                                 const EventBits_t uxBitsToSet );
+static void wificlient_clear_bits( EventGroupHandle_t xEventGroup,
+                                   const EventBits_t uxBitsToClear );
 /* EventGroup and bits */
 static EventGroupHandle_t s_wificlient_event_group;
 static const int CONNECTED_BIT = BIT0;
 static const int DONE_BIT = BIT1;
 
 /* NVS handle for wifi client */
-static nvs_handle_t s_wificlient_handle = 0;
+nvs_handle_t s_wificlient_handle = 0;
+
+SemaphoreHandle_t s_wc_sem = NULL;
+SemaphoreHandle_t s_wc_sem_bits = NULL;
+QueueHandle_t s_wc_queue;
+wificlient_event_t event_log = {
+  .event_id = 0
+};
 
 /* Static variables for credentials */
-static uint8_t s_wificlient_has_credentials = 0;
+uint8_t s_wificlient_has_credentials = 0;
 static uint8_t s_wificlient_ssid[33] = { 0 };
 static uint8_t *s_wificlient_password[65] = { 0 };
 static uint8_t bssid_set = 0;
 static uint8_t *s_wificlient_bssid[7] = { 0 };
 
 /* WIFI interface */
+#if defined(UNITY)
+esp_netif_t *sta_netif = NULL;
+#else
 static esp_netif_t *sta_netif = NULL;
+#endif // UNITY
 
 /* wificlient configuration */
+#if defined(UNITY)
+wificlient_config_t *s_wificlient_config;
+#else
 static wificlient_config_t *s_wificlient_config;
+#endif // UNITY
 
 
 static uint8_t _wificlient_load_credentials()
@@ -66,11 +76,13 @@ static uint8_t _wificlient_load_credentials()
   nvs_get_str(s_wificlient_handle, WIFICLIENT_KEY_SSID, (char *)s_wificlient_ssid, &required);
   if (required != sizeof(s_wificlient_ssid)) {
     // error log
+    ESP_LOGE(TAG, "Reading the SSDI failed");
   }
   // PASSWORD
   nvs_get_str(s_wificlient_handle, WIFICLIENT_KEY_PASSWORD, (char *)s_wificlient_password, &required);
   if (required != sizeof(s_wificlient_password)) {
     // error log
+    ESP_LOGE(TAG, "Reading the PASSWORD failed");
   }
   // BSSID
   nvs_get_u8(s_wificlient_handle, WIFICLIENT_KEY_BSSID_SET, &bssid_set);
@@ -78,6 +90,7 @@ static uint8_t _wificlient_load_credentials()
     nvs_get_str(s_wificlient_handle, WIFICLIENT_KEY_BSSID, (char *)s_wificlient_bssid, &required);
     if (required != sizeof(s_wificlient_password)) {
       // error log
+      ESP_LOGE(TAG, "Reading the PASSWORD failed");
     }
   }
   if (strlen((const char*)s_wificlient_ssid) > 0 && strlen((const char*)s_wificlient_password) > 0) {
@@ -87,9 +100,8 @@ static uint8_t _wificlient_load_credentials()
   return 0;
 }
 
-static void wificlient_connect_task(void* param)
+static void wificlient_connect(void)
 {
-  //EventBits_t uxBits;
   // Connect WIFI with saved credentials
   if (s_wificlient_has_credentials) {
     wifi_config_t wifi_config;
@@ -110,8 +122,6 @@ static void wificlient_connect_task(void* param)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_connect());
   }
-
-  vTaskDelete(NULL);
 }
 
 esp_err_t wificlient_init(wificlient_config_t *config)
@@ -150,6 +160,10 @@ esp_err_t wificlient_init(wificlient_config_t *config)
   memset(s_wificlient_ssid, 0, sizeof(s_wificlient_ssid));
   memset(s_wificlient_password, 0, sizeof(s_wificlient_password));
   memset(s_wificlient_bssid, 0, sizeof(s_wificlient_bssid));
+  s_wc_sem = xSemaphoreCreateBinary();
+  s_wc_sem_bits = xSemaphoreCreateBinary();
+  xSemaphoreGive(s_wc_sem_bits);
+  s_wc_queue = xQueueGenericCreate(WIFICELINT_EVQUEUE_NUM, sizeof(uint16_t), queueOVERWRITE);
 
   // WIFI EVENT
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
@@ -158,6 +172,7 @@ esp_err_t wificlient_init(wificlient_config_t *config)
     // Smart Config EVENT
   ESP_ERROR_CHECK(esp_event_handler_register(SC_EVENT, ESP_EVENT_ANY_ID, &smart_config_event_handler, NULL));
   s_wificlient_has_credentials = _wificlient_load_credentials();
+
   ESP_LOGI(TAG, "initialized.");
   return ESP_OK;
 }
@@ -168,8 +183,11 @@ esp_err_t wificlient_deinit(void)
   esp_wifi_stop();
   esp_wifi_restore();
   if (s_wificlient_event_group != NULL) {
-    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
+    wificlient_clear_bits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
   }
+  vSemaphoreDelete(s_wc_sem);
+  vSemaphoreDelete(s_wc_sem_bits);
+  vQueueDelete(s_wc_queue);
   return ESP_OK;
 }
 
@@ -182,15 +200,24 @@ esp_err_t wificlient_deinit_with_check(void)
   ESP_ERROR_CHECK(esp_wifi_restore());
   ESP_ERROR_CHECK(esp_wifi_deinit());
   if (s_wificlient_event_group != NULL) {
-    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
+    wificlient_clear_bits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
     vEventGroupDelete(s_wificlient_event_group);
     s_wificlient_event_group = NULL;
   }
   ESP_ERROR_CHECK(esp_event_loop_delete_default());
+  vSemaphoreDelete(s_wc_sem);
+  vSemaphoreDelete(s_wc_sem_bits);
+  vQueueDelete(s_wc_queue);
   return ESP_OK;
 }
+
 esp_err_t wificlient_start(void)
 {
+  // Start Tasks
+  if (s_wc_sem == NULL) {
+    s_wc_sem = xSemaphoreCreateBinary();
+  }
+  xTaskCreate(connect_task, "connect_task", 4096, NULL, 3, NULL);
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_start());
   return ESP_OK;
@@ -198,6 +225,10 @@ esp_err_t wificlient_start(void)
 
 esp_err_t wificlient_stop(void)
 {
+  if (s_wc_sem != NULL) {
+    vSemaphoreDelete(s_wc_sem);
+    s_wc_sem = NULL;
+  }
   ESP_ERROR_CHECK(esp_wifi_stop());
   return ESP_OK;
 }
@@ -223,55 +254,72 @@ esp_err_t wificlient_wait_for_connected(TickType_t xTicksToWait)
 
 static void connect_task(void *parm)
 {
+  uint16_t retry;
   EventBits_t uxBits;
   ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH));
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_AIRKISS)); */
   /* ESP_ERROR_CHECK(esp_smartconfig_set_type(SC_TYPE_ESPTOUCH_V2)); */
-  if (!s_wificlient_has_credentials) {
-    ESP_LOGI(TAG, "connect_task start");
-    smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_smartconfig_start(&cfg));
 
-    while (1) {
-      uxBits = xEventGroupWaitBits(s_wificlient_event_group,
-                                   CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
-      if(uxBits & CONNECTED_BIT) {
-        // ESP_LOGI(TAG, "WiFi Connected to ap");
-      }
-      if(uxBits & DONE_BIT) {
-        // ESP_LOGI(TAG, "smartconfig over");
-        esp_smartconfig_stop();
-        vTaskDelete(NULL);
-      }
-      vTaskDelay(pdMS_TO_TICKS(3000));
+  do {
+    if (s_wc_sem == NULL) {
+      break;
+    } else if (xSemaphoreTake(s_wc_sem, (TickType_t) 1000) != pdTRUE) {
+      continue;
     }
-  } else {
-    ESP_LOGI(TAG, "connect task start");
-    wificlient_connect_task(NULL);
-    while (1) {
-      uxBits = xEventGroupWaitBits(s_wificlient_event_group,
-                                   CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
-      if(uxBits & CONNECTED_BIT) {
-        esp_netif_dhcp_status_t dhcp_status;
-        ESP_ERROR_CHECK(esp_netif_dhcpc_get_status(sta_netif, &dhcp_status));
-        if (dhcp_status != ESP_NETIF_DHCP_STARTED) {
-          ESP_LOGI(TAG, "connect_task: wifi connected, but DHCP have not started");
+    if (!s_wificlient_has_credentials) {
+      ESP_LOGI(TAG, "connect_task: smart_config start");
+      smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
+      ESP_ERROR_CHECK(esp_smartconfig_start(&cfg));
+      retry = 3;
+      do {
+        uxBits = xEventGroupWaitBits(s_wificlient_event_group,
+                                     CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
+        if(uxBits & CONNECTED_BIT) {
+          // ESP_LOGI(TAG, "WiFi Connected to ap");
         }
-        xEventGroupSetBits(s_wificlient_event_group, DONE_BIT);
-        vTaskDelete(NULL);
-      }
-      vTaskDelay(pdMS_TO_TICKS(3));
+        if(uxBits & DONE_BIT) {
+          // ESP_LOGI(TAG, "smartconfig over");
+          esp_smartconfig_stop();
+          break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(30));
+      } while (retry-- > 0);
+    } else {
+      ESP_LOGI(TAG, "connect task: start connecting");
+      wificlient_connect();
+      retry = 10;
+      do {
+        uxBits = xEventGroupWaitBits(s_wificlient_event_group,
+                                     CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
+        if(uxBits & CONNECTED_BIT) {
+          ESP_LOGI(TAG, "connect_task: wifi connected");
+          esp_netif_dhcpc_stop(sta_netif);            
+          esp_netif_dhcp_status_t dhcp_status;
+          ESP_ERROR_CHECK(esp_netif_dhcpc_get_status(sta_netif, &dhcp_status));
+          if (dhcp_status != ESP_NETIF_DHCP_STARTED) {
+            ESP_LOGI(TAG, "connect_task: wifi connected, but DHCP have not started");
+            esp_netif_dhcpc_start(sta_netif);            
+          }
+          wificlient_set_bits(s_wificlient_event_group, DONE_BIT);
+          break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+      } while (retry-- > 0);
     }
-  }
+  } while (s_wc_sem != NULL);
+
+  vTaskDelete(NULL);
 }
 
-static void wifi_event_handler(void* arg, esp_event_base_t event_base,
+void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data)
 {
   if (event_base != WIFI_EVENT) {
     return;
   }
+  event_log.event_id = event_id;
+  xQueueOverwrite(s_wc_queue, (const void * const)&event_log);
   switch(event_id) {
   case WIFI_EVENT_WIFI_READY:
     ESP_LOGI(TAG, "WIFI_EVENT: wifi_ready.");
@@ -281,7 +329,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     break;
   case WIFI_EVENT_STA_START:
     ESP_LOGI(TAG, "WIFI_EVENT: sta started.");
-    xTaskCreate(connect_task, "connect_task", 4096, NULL, 3, NULL);
+    xSemaphoreGive(s_wc_sem);
     break;
   case WIFI_EVENT_STA_STOP:
     ESP_LOGI(TAG, "WIFI_EVENT: sta stoppped.");
@@ -291,8 +339,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     break;
   case WIFI_EVENT_STA_DISCONNECTED:
     ESP_LOGI(TAG, "WIFI_EVENT: sta disconnected.");
-    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT);
-    xTaskCreate(connect_task, "connect_task", 4096, NULL, 3, NULL);
+    wificlient_clear_bits(s_wificlient_event_group, CONNECTED_BIT|DONE_BIT);
+    if (s_wc_sem != NULL) {
+      xSemaphoreGive(s_wc_sem);
+    }
     break;
   case WIFI_EVENT_STA_BEACON_TIMEOUT:
     ESP_LOGI(TAG, "Station received beacon timeout event.");
@@ -303,7 +353,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
   }
 }
 
-static void ip_event_handler(void* arg, esp_event_base_t event_base,
+void ip_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data)
 {
   if (event_base != IP_EVENT) {
@@ -312,15 +362,11 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
   switch(event_id) {
   case IP_EVENT_STA_GOT_IP:
     ESP_LOGI(TAG, "IP_EVENT: Got IP");
-    xEventGroupSetBits(s_wificlient_event_group, CONNECTED_BIT);
-    if (s_wificlient_has_credentials) {
-      ESP_LOGI(TAG, "\tdhcpc starts");
-      esp_netif_dhcpc_start(sta_netif);
-    }
+    wificlient_set_bits(s_wificlient_event_group, CONNECTED_BIT);
     break;
   case IP_EVENT_STA_LOST_IP:
     ESP_LOGI(TAG, "IP_EVENT: Lost IP");
-    xEventGroupClearBits(s_wificlient_event_group, CONNECTED_BIT);
+    // wificlient_clear_bits(s_wificlient_event_group, CONNECTED_BIT);
     break;
   default:
     ESP_LOGI(TAG, "IP_EVENT: event_id = %d\n", event_id);
@@ -328,7 +374,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
   }
 }
 
-static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
+void smart_config_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data)
 {
   esp_err_t err;
@@ -381,10 +427,45 @@ static void smart_config_event_handler(void* arg, esp_event_base_t event_base,
     break;
   case SC_EVENT_SEND_ACK_DONE:
     ESP_LOGI(TAG, "SC_EVENT: SEND_ACK_DONE");
-    xEventGroupSetBits(s_wificlient_event_group, DONE_BIT);
+    wificlient_set_bits(s_wificlient_event_group, DONE_BIT);
     break;
   default:
     ESP_LOGI(TAG, "SC_EVENT: event_id = %d\n", event_id);
     return;
+  }
+}
+
+wificlient_event_t *wificlient_event_get_latest(void)
+{
+  xQueueReceive(s_wc_queue, (void * const)&event_log, WIFICELINT_EVQUEUE_TIMEOUT_TICK);
+  return &event_log;
+}
+
+
+static void wificlient_set_bits( EventGroupHandle_t xEventGroup,
+                                 const EventBits_t uxBitsToSet )
+{
+  while (1) {
+    ESP_LOGI(TAG, "set_bits before");
+    if (xSemaphoreTake(s_wc_sem_bits, 10)) {
+      xEventGroupSetBits(xEventGroup, uxBitsToSet);
+      xSemaphoreGive(s_wc_sem_bits);
+      ESP_LOGI(TAG, "set_bits after");
+      break;
+    }
+  }
+}
+
+static void wificlient_clear_bits( EventGroupHandle_t xEventGroup,
+                                  const EventBits_t uxBitsToClear )
+{
+  while (1) {
+    ESP_LOGI(TAG, "clear_bits before");
+    if (xSemaphoreTake(s_wc_sem_bits, 10)) {
+      xEventGroupClearBits(xEventGroup, uxBitsToClear);
+      xSemaphoreGive(s_wc_sem_bits);
+      ESP_LOGI(TAG, "clear_bits after");
+      break;
+    }
   }
 }
