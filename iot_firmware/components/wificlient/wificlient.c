@@ -235,7 +235,7 @@ esp_err_t wificlient_stop(void)
 
 bool wificlient_is_connected(void)
 {
-  if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT|DONE_BIT) {
+  if (xEventGroupGetBits(s_wificlient_event_group) && CONNECTED_BIT) {
     return true;
   }
 
@@ -288,24 +288,16 @@ static void connect_task(void *parm)
     } else {
       ESP_LOGI(TAG, "connect task: start connecting");
       wificlient_connect();
-      retry = 10;
-      do {
+      while( 1 ) {
         uxBits = xEventGroupWaitBits(s_wificlient_event_group,
-                                     CONNECTED_BIT | DONE_BIT, false, false, portMAX_DELAY);
+                                     CONNECTED_BIT, false, false, pdMS_TO_TICKS(5000));
         if(uxBits & CONNECTED_BIT) {
           ESP_LOGI(TAG, "connect_task: wifi connected");
-          esp_netif_dhcpc_stop(sta_netif);            
-          esp_netif_dhcp_status_t dhcp_status;
-          ESP_ERROR_CHECK(esp_netif_dhcpc_get_status(sta_netif, &dhcp_status));
-          if (dhcp_status != ESP_NETIF_DHCP_STARTED) {
-            ESP_LOGI(TAG, "connect_task: wifi connected, but DHCP have not started");
-            esp_netif_dhcpc_start(sta_netif);            
-          }
           wificlient_set_bits(s_wificlient_event_group, DONE_BIT);
           break;
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
-      } while (retry-- > 0);
+      }
     }
   } while (s_wc_sem != NULL);
 

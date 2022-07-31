@@ -65,7 +65,7 @@ TEST_CASE("wifi event handle DISCONNECTED", "[failure]")
     if (wificlient_is_connected()) {
       ESP_LOGI("TEST", "Free Heap Size %d", xPortGetFreeHeapSize());
       // TODO Reproduce disconnection to verify to be reconnectable.
-      // esp_wifi_disconnect();
+      /* esp_wifi_disconnect(); */
     }
     vTaskDelay(pdMS_TO_TICKS(2000));
   }
