@@ -1,0 +1,9 @@
+menu WIFICLIENT_TEST
+  config WIFICLIENT_TEST_SSID
+    string "ssid"
+    default ""
+
+  config WIFICLIENT_TEST_PASSWORD
+    string "password"
+    default ""
+endmenu
